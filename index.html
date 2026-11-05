@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>La mia auto — Manutenzione</title>
+<!-- iOS "Aggiungi a Home": si comporta come un'app a tutto schermo -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="La mia auto" />
+<meta name="theme-color" content="#0f1115" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<style>
+  :root {
+    --bg: #0f1115; --card: #181b22; --card2: #1f2430; --text: #e8eaed;
+    --muted: #9aa0ab; --line: #2a2f3a; --primary: #4f8cff; --primary-ct: #0b2140;
+    --ok: #3c9a5f; --warn: #d6a21a; --bad: #e5484d; --soon: #3a7bd5; --check: #7bb0a0;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { padding: 16px 16px calc(28px + env(safe-area-inset-bottom)); max-width: 640px; margin: 0 auto; }
+  header { padding: 8px 2px 14px; }
+  h1 { font-size: 1.35rem; margin: 0; }
+  .sub { color: var(--muted); font-size: .9rem; margin-top: 3px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px; margin-bottom: 14px; }
+  .veh-name { font-size: 1.1rem; font-weight: 700; }
+  .veh-meta { color: var(--muted); font-size: .9rem; margin-top: 2px; }
+  .kmrow { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .kmrow input { flex: 1; min-width: 0; background: var(--card2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 1.05rem; }
+  button { background: var(--primary); color: #fff; border: 0; border-radius: 12px;
+    padding: 12px 16px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; }
+  .section-title { font-weight: 700; margin: 18px 2px 8px; }
+  .item { display: flex; align-items: flex-start; gap: 10px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .item:first-child { border-top: 0; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; }
+  .item .body { flex: 1; min-width: 0; }
+  .item .name { font-weight: 600; }
+  .item .detail { color: var(--muted); font-size: .88rem; margin-top: 2px; }
+  .pill { display: inline-block; font-size: .72rem; padding: 2px 8px; border-radius: 999px;
+    background: var(--primary-ct); color: #bcd3ff; margin-left: 6px; vertical-align: middle; }
+  .muted { color: var(--muted); }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 24px;
+    background: #2a2f3a; color: #fff; padding: 11px 16px; border-radius: 12px; font-size: .9rem;
+    opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .center { text-align: center; color: var(--muted); padding: 40px 10px; }
+  .check { color: var(--check); font-size: .85rem; margin-top: 3px; }
+  .veh-sep { font-size: 1.05rem; font-weight: 800; margin: 20px 2px 6px; color: var(--primary);
+    border-top: 1px solid var(--line); padding-top: 16px; }
+  .veh-sep:first-of-type { border-top: 0; padding-top: 0; }
+  .notifbar { display: flex; align-items: center; gap: 10px; background: var(--card);
+    border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 14px; }
+  .notifbar .txt { flex: 1; min-width: 0; font-size: .92rem; }
+  .notifbar .txt small { color: var(--muted); display: block; margin-top: 2px; font-size: .82rem; }
+  .notifbar button { padding: 9px 14px; font-size: .9rem; }
+  .notifbar.on { border-color: var(--ok); }
+  .notifbar .ok { color: var(--ok); font-weight: 700; font-size: .9rem; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f3f4f6; --card:#fff; --card2:#f0f2f5; --text:#1a1c20; --muted:#5f6670;
+            --line:#e3e6ea; --primary-ct:#e4edff; --check:#2f7d6a; }
+  }
+</style>
+</head>
+<body>
+<div id="notifbar"></div>
+<div id="app"><div class="center">Carico…</div></div>
+<div id="toast" class="toast"></div>
+
+<script>
+// ---- countdown: stessa logica dell'app (prudente = recKm/recMonths se presenti) ----
+const WARN_KM = 1000, WARN_DAYS = 30, HORIZON_KM = 3000, HORIZON_DAYS = 90, DAY = 86400000;
+function compute(t, curKm) {
+  const ik = (t.recKm ?? t.km), im = (t.recMonths ?? t.months);
+  if (t.lastKm == null && t.lastDate == null) return { status: "NEVER" };
+  let kmRem = null, dayRem = null;
+  if (ik != null && t.lastKm != null && curKm != null) kmRem = (t.lastKm + ik) - curKm;
+  if (im != null && t.lastDate != null) dayRem = Math.round(((t.lastDate + im * 30 * DAY) - Date.now()) / DAY);
+  const overdue = (kmRem != null && kmRem < 0) || (dayRem != null && dayRem < 0);
+  const dueSoon = !overdue && !((kmRem == null || kmRem > WARN_KM) && (dayRem == null || dayRem > WARN_DAYS));
+  let status = overdue ? "OVERDUE" : (dueSoon ? "DUE_SOON" : "OK");
+  return { status, kmRem, dayRem };
+}
+function isUpcoming(c) {
+  return (c.kmRem != null && c.kmRem >= 0 && c.kmRem <= HORIZON_KM) ||
+         (c.dayRem != null && c.dayRem >= 0 && c.dayRem <= HORIZON_DAYS);
+}
+function rank(s){ return s==="OVERDUE"?0 : s==="DUE_SOON"?1 : s==="UPCOMING"?2 : 3; }
+function fmtKm(n){ return (n==null?"—":Number(n).toLocaleString("it-IT")) + " km"; }
+function detailText(c) {
+  if (c.kmRem != null && c.kmRem < 0) return "superato di " + fmtKm(-c.kmRem);
+  if (c.kmRem != null) return "tra " + fmtKm(c.kmRem);
+  if (c.dayRem != null && c.dayRem < 0) return "superato di " + (-c.dayRem) + " gg";
+  if (c.dayRem != null && c.dayRem >= 45) return "tra ~" + Math.round(c.dayRem / 30) + " mesi";
+  if (c.dayRem != null) return "tra " + c.dayRem + " gg";
+  return "";
+}
+function dotColor(s){ return s==="OVERDUE"?"var(--bad)" : s==="DUE_SOON"?"var(--warn)" : s==="UPCOMING"?"var(--soon)" : "var(--ok)"; }
+function everyStr(km, months) {
+  const parts = [];
+  if (km) parts.push("ogni " + fmtKm(km));
+  if (months) parts.push(months % 12 === 0
+    ? "ogni " + (months/12) + (months/12 === 1 ? " anno" : " anni")
+    : "ogni " + months + " mesi");
+  return parts.join(" / ");
+}
+function esc(s){ return String(s ?? "").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+// Controlli "verificato, ancora buono" del ciclo corrente (dall'ultimo intervento in poi).
+function currentChecks(t) {
+  const arr = Array.isArray(t.checks) ? t.checks : [];
+  if (t.lastDate == null) return arr;
+  return arr.filter(c => (c.date ?? Infinity) >= t.lastDate);
+}
+function checksHtml(t) {
+  const cs = currentChecks(t);
+  if (!cs.length) return "";
+  return cs.map(c => {
+    const when = [c.km != null ? fmtKm(c.km) : null,
+                  c.date ? new Date(c.date).toLocaleDateString("it-IT") : null].filter(Boolean).join(" · ");
+    const note = (c.note && String(c.note).trim()) ? " — " + esc(c.note) : "";
+    return '<div class="check">✓ Verificato: ' + esc(when) + note + '</div>';
+  }).join("");
+}
+
+// ---- data source ----
+const params = new URLSearchParams(location.search);
+const SLUG = params.get("c") || "";
+const MOCK = params.get("mock") === "1";
+// ↓↓↓ METTI QUI l'indirizzo del tuo Worker Cloudflare (es. https://carmaint-api.tuonome.workers.dev)
+// Lascialo "" solo se la pagina è servita dallo stesso Worker.
+const API = "https://carmaint-api.rocco92-rc.workers.dev";
+
+// Chiave pubblica VAPID per le notifiche push (è pubblica, può stare qui).
+// La privata va SOLO come segreto sul Worker (vedi LEGGIMI). Lascia "" per disattivare i promemoria.
+const VAPID_PUBLIC = "BK4sbadHftpoUuxB-dpEb8MvfUhe8Tg2xHqV84SR13BcH8C31UISgAVQ0RvczK8_pNsa9UGevYOOgj3L6gjiViQ";
+
+const MOCK_DATA = {
+  client: "Simone Dallara", slug: "simone-dallara", updatedAt: Date.now(),
+  vehicles: [{
+    vid: "v1a2b3c4", name: "Lancia Y", plate: "AB123CD", brand: "Lancia", model: "Ypsilon", year: 2013, odometerKm: 98000,
+    tasks: [
+      { name:"Cambio olio motore", category:"Olio motore", km:30000, months:24, recKm:15000, recMonths:12, lastKm:90000, lastDate: Date.now()-200*DAY, notes:"Con filtro olio. Urbano: ogni 12 mesi.", enabled:true },
+      { name:"Candele", category:"Accensione", km:30000, lastKm:70000, lastDate: Date.now()-900*DAY, enabled:true,
+        checks:[ { km:95000, date: Date.now()-40*DAY, note:"ancora buone, sostituire al prossimo tagliando" } ] },
+      { name:"Cinghia distribuzione", category:"Distribuzione", km:120000, months:60, lastKm:20000, lastDate: Date.now()-1500*DAY, enabled:true },
+      { name:"Filtro abitacolo (antipolline)", category:"Filtri", km:30000, months:12, lastKm:90000, lastDate: Date.now()-30*DAY, enabled:true }
+    ]
+  }, {
+    vid: "v9z8y7x6", name: "Fiat Panda", plate: "GH456KL", brand: "Fiat", model: "Panda", year: 2019, odometerKm: 42000,
+    tasks: [
+      { name:"Cambio olio motore", category:"Olio motore", km:15000, months:12, lastKm:40000, lastDate: Date.now()-100*DAY, enabled:true },
+      { name:"Pastiglie freni anteriori", category:"Freni", km:40000, lastKm:10000, lastDate: Date.now()-600*DAY, enabled:true,
+        checks:[ { km:41000, date: Date.now()-20*DAY, note:"spessore ok, ancora buone" } ] }
+    ]
+  }]
+};
+
+async function loadData() {
+  if (MOCK) return MOCK_DATA;
+  const r = await fetch(API + "/api/client?slug=" + encodeURIComponent(SLUG));
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return await r.json();
+}
+
+async function saveKm(km, vid) {
+  if (MOCK) { return; }
+  const r = await fetch(API + "/api/km", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slug: SLUG, km, vid })
+  });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+}
+
+let DATA = null;
+
+// Un blocco completo per una singola auto: card + km, prossime scadenze, storico.
+function renderVehicle(v, idx) {
+  let html = '<div class="card">';
+  html += '<div class="veh-name">' + esc(v.name) + '</div>';
+  html += '<div class="veh-meta">' + esc([v.brand, v.model, v.year].filter(Boolean).join(" ")) +
+          (v.plate ? " · " + esc(v.plate) : "") + '</div>';
+  html += '<div class="kmrow"><input id="km' + idx + '" type="number" inputmode="numeric" value="' +
+          (v.odometerKm ?? "") + '" placeholder="km attuali" />' +
+          '<button id="saveKm' + idx + '">Aggiorna km</button></div>';
+  html += '</div>';
+
+  // scadenze (overdue/due/upcoming) ordinate
+  const cur = v.odometerKm;
+  function soon(x){ const d = x.c.dayRem ?? 1e9, k = x.c.kmRem != null ? x.c.kmRem/30 : 1e9; return Math.min(d,k); }
+  const items = (v.tasks || []).filter(t => t.enabled !== false).map(t => {
+    const c = compute(t, cur);
+    let st = c.status;
+    if (st === "OK") st = isUpcoming(c) ? "UPCOMING" : "HIDE";
+    return { t, c, st };
+  }).filter(x => x.st !== "HIDE" && x.st !== "NEVER");
+  items.sort((a,b) => rank(a.st)-rank(b.st) || soon(a)-soon(b));
+
+  html += '<div class="section-title">Prossime scadenze</div>';
+  if (!items.length) html += '<div class="card muted">Tutto in regola 👍</div>';
+  else {
+    html += '<div class="card">';
+    for (const x of items) {
+      html += '<div class="item"><div class="dot" style="background:' + dotColor(x.st) + '"></div>' +
+        '<div class="body"><div class="name">' + esc(x.t.name) + '</div>' +
+        '<div class="detail">' + esc(detailText(x.c)) + '</div>' + checksHtml(x.t) + '</div></div>';
+    }
+    html += '</div>';
+  }
+
+  // storico (tutte le voci con ultima esecuzione)
+  html += '<div class="section-title">Tutti gli interventi</div><div class="card">';
+  for (const t of (v.tasks || [])) {
+    const interval = everyStr(t.km, t.months);
+    const prudent = (t.recKm || t.recMonths) ? everyStr(t.recKm, t.recMonths) : null;
+    const last = (t.lastKm != null || t.lastDate != null)
+      ? "ultima: " + [t.lastKm != null ? fmtKm(t.lastKm) : null, t.lastDate ? new Date(t.lastDate).toLocaleDateString("it-IT") : null].filter(Boolean).join(" · ")
+      : "mai eseguita";
+    html += '<div class="item"><div class="body"><div class="name">' + esc(t.name) +
+      (prudent ? '<span class="pill">consigliato</span>' : '') + '</div>' +
+      '<div class="detail">' + (interval ? esc("Casa madre: " + interval) + ' · ' : '') +
+      (prudent ? esc("consigliato: " + prudent) + ' · ' : '') + esc(last) + '</div>' +
+      checksHtml(t) + '</div></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function render() {
+  const app = document.getElementById("app");
+  if (!DATA) { app.innerHTML = '<div class="center">Nessun dato.</div>'; return; }
+  const vehicles = DATA.vehicles || [];
+  let html = '<header><h1>' + esc(DATA.client || "La mia auto") + '</h1>' +
+    '<div class="sub">Manutenzione — aggiornato ' + new Date(DATA.updatedAt || Date.now()).toLocaleDateString("it-IT") + '</div></header>';
+  if (!vehicles.length) { app.innerHTML = html + '<div class="center">Nessun veicolo.</div>'; return; }
+
+  vehicles.forEach((v, i) => {
+    // Con più auto, un titolo separa un veicolo dall'altro.
+    if (vehicles.length > 1) html += '<div class="veh-sep">' + esc(v.name) + '</div>';
+    html += renderVehicle(v, i);
+  });
+
+  app.innerHTML = html;
+  vehicles.forEach((v, i) => {
+    const btn = document.getElementById("saveKm" + i);
+    if (btn) btn.onclick = () => onSaveKm(i);
+  });
+}
+
+async function onSaveKm(idx) {
+  const input = document.getElementById("km" + idx);
+  const btn = document.getElementById("saveKm" + idx);
+  const v = DATA.vehicles[idx];
+  const km = parseInt(input.value, 10);
+  if (isNaN(km) || km < 0) { toast("Inserisci un numero valido"); return; }
+  btn.disabled = true; btn.textContent = "Salvo…";
+  try {
+    await saveKm(km, v.vid);
+    v.odometerKm = km;
+    DATA.updatedAt = Date.now();
+    toast("Km aggiornati ✓");
+    render();
+  } catch (e) {
+    toast("Errore: riprova più tardi");
+    btn.disabled = false; btn.textContent = "Aggiorna km";
+  }
+}
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+
+// ---- Promemoria push ----
+let swReg = null;
+function urlB64ToUint8Array(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const base = (b64 + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+function pushSupported() {
+  return "serviceWorker" in navigator && "PushManager" in window &&
+         "Notification" in window && !!VAPID_PUBLIC;
+}
+// iOS consente il push solo se la pagina è stata "Aggiunta a Home" (standalone).
+function iosNeedsInstall() {
+  const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const standalone = window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  return iOS && !standalone;
+}
+
+async function renderNotifBar() {
+  const bar = document.getElementById("notifbar");
+  if (!bar) return;
+  if (!pushSupported() || (!SLUG && !MOCK)) { bar.innerHTML = ""; return; }
+  if (iosNeedsInstall()) {
+    bar.className = "notifbar";
+    bar.innerHTML = '<div class="txt">🔔 Vuoi i promemoria?<small>Su iPhone: tocca Condividi → “Aggiungi a Home”, poi apri l’icona e attiva i promemoria.</small></div>';
+    return;
+  }
+  let sub = null;
+  try { sub = swReg && (await swReg.pushManager.getSubscription()); } catch (_) {}
+  if (sub && Notification.permission === "granted") {
+    bar.className = "notifbar on";
+    bar.innerHTML = '<div class="txt">🔔 Promemoria attivi<small>Ti avvisiamo quando c’è una scadenza.</small></div><span class="ok">✓ attivi</span>';
+    return;
+  }
+  bar.className = "notifbar";
+  bar.innerHTML = '<div class="txt">🔔 Promemoria scadenze<small>Ricevi un avviso quando una manutenzione è in scadenza.</small></div><button id="enableNotif">Attiva</button>';
+  const b = document.getElementById("enableNotif");
+  if (b) b.onclick = enableReminders;
+}
+
+async function enableReminders() {
+  const b = document.getElementById("enableNotif");
+  if (b) { b.disabled = true; b.textContent = "…"; }
+  try {
+    if (!swReg) swReg = await navigator.serviceWorker.ready;
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("Permesso negato"); return renderNotifBar(); }
+    const sub = await swReg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC),
+    });
+    if (!MOCK) {
+      const r = await fetch(API + "/api/subscribe", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: SLUG, subscription: sub.toJSON() }),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+    }
+    toast("Promemoria attivati ✓");
+  } catch (e) {
+    toast("Impossibile attivare i promemoria");
+  } finally {
+    renderNotifBar();
+  }
+}
+
+async function init() {
+  if (!SLUG && !MOCK) {
+    document.getElementById("app").innerHTML =
+      '<div class="center">Link non valido: manca il codice cliente.</div>';
+    return;
+  }
+  try { DATA = await loadData(); render(); }
+  catch (e) {
+    document.getElementById("app").innerHTML =
+      '<div class="center">Impossibile caricare i dati.<br>Controlla il link o riprova più tardi.</div>';
+  }
+}
+async function registerSW() {
+  if (!("serviceWorker" in navigator)) return;
+  try { swReg = await navigator.serviceWorker.register("sw.js"); }
+  catch (_) {}
+  renderNotifBar();
+}
+registerSW();
+init();
+</script>
+</body>
+</html>
