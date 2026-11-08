@@ -316,7 +316,9 @@ function renderEditor(){
   h += '<div class="row"><button class="ghost" id="addVehBtn">+ Aggiungi auto</button></div>';
   document.getElementById("root").innerHTML = h;
 
-  // save bar
+  // save bar — remove any previous one first (renderEditor runs on every add/delete,
+  // and a leftover bar would stack on top with a dead, unwired Save button).
+  document.querySelectorAll(".savebar").forEach(b => b.remove());
   const bar = document.createElement("div");
   bar.className = "savebar";
   const n = dirtyCount();
