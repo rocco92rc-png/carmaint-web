@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Officina — Gestione clienti</title>
+<meta name="theme-color" content="#0f1115" />
+<style>
+  :root {
+    --bg:#0f1115; --card:#181b22; --card2:#1f2430; --text:#e8eaed; --muted:#9aa0ab;
+    --line:#2a2f3a; --primary:#4f8cff; --primary-ct:#0b2140; --ok:#3c9a5f; --warn:#d6a21a;
+    --bad:#e5484d;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  body { padding:16px 16px 120px; max-width:860px; margin:0 auto; }
+  header { padding:8px 2px 14px; display:flex; align-items:center; gap:12px; }
+  h1 { font-size:1.35rem; margin:0; flex:1; }
+  .muted { color:var(--muted); }
+  .sub { color:var(--muted); font-size:.9rem; margin-top:3px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:16px; margin-bottom:14px; }
+  .veh-card { border-left:3px solid var(--primary); }
+  .task-card { background:var(--card2); border:1px solid var(--line); border-radius:12px;
+    padding:12px; margin:10px 0; }
+  .iv-card { background:var(--card); border:1px dashed var(--line); border-radius:10px;
+    padding:10px; margin:8px 0; }
+  label { display:block; font-size:.78rem; color:var(--muted); margin:8px 0 3px; }
+  input, select, textarea { width:100%; background:var(--card2); border:1px solid var(--line);
+    color:var(--text); border-radius:10px; padding:10px 12px; font-size:.95rem; font-family:inherit; }
+  .veh-card input, .veh-card select { background:var(--bg); }
+  textarea { min-height:52px; resize:vertical; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px 10px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .chk { display:flex; align-items:center; gap:8px; margin-top:10px; }
+  .chk input { width:auto; }
+  button { background:var(--primary); color:#fff; border:0; border-radius:10px;
+    padding:10px 14px; font-size:.95rem; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
+  button.danger { background:transparent; border:1px solid var(--bad); color:var(--bad); padding:7px 11px; font-size:.85rem; }
+  button.small { padding:8px 12px; font-size:.88rem; }
+  .clientrow { display:flex; align-items:center; gap:12px; padding:14px 2px; border-top:1px solid var(--line); cursor:pointer; }
+  .clientrow:first-child { border-top:0; }
+  .clientrow:hover .cname { color:var(--primary); }
+  .clientrow .cname { font-weight:600; }
+  .clientrow .cmeta { color:var(--muted); font-size:.85rem; }
+  .spacer { flex:1; }
+  .section-title { font-weight:700; margin:16px 2px 6px; }
+  .task-head { display:flex; align-items:center; gap:10px; }
+  .task-head .tname { font-weight:600; flex:1; }
+  .savebar { position:fixed; left:0; right:0; bottom:0; background:var(--card);
+    border-top:1px solid var(--line); padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    display:flex; align-items:center; gap:12px; }
+  .savebar .inner { max-width:860px; margin:0 auto; width:100%; display:flex; align-items:center; gap:12px; }
+  .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:84px; background:#2a2f3a;
+    color:#fff; padding:11px 16px; border-radius:12px; font-size:.9rem; opacity:0; transition:opacity .2s;
+    pointer-events:none; z-index:10; }
+  .toast.show { opacity:1; }
+  .center { text-align:center; color:var(--muted); padding:40px 10px; }
+  .login { max-width:360px; margin:12vh auto 0; }
+  .pill { display:inline-block; font-size:.72rem; padding:2px 8px; border-radius:999px;
+    background:var(--primary-ct); color:#bcd3ff; }
+  .warnpill { background:#3a2a12; color:#f0c674; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f3f4f6; --card:#fff; --card2:#f0f2f5; --text:#1a1c20; --muted:#5f6670;
+            --line:#e3e6ea; --primary-ct:#e4edff; }
+  }
+</style>
+</head>
+<body>
+<div id="root"><div class="center">Carico…</div></div>
+<div id="toast" class="toast"></div>
+
+<script>
+const API = "https://carmaint-api.rocco92-rc.workers.dev";
+const DAY = 86400000;
+const CATEGORIES = ["Olio motore","Filtri","Accensione","Distribuzione","Freni","Raffreddamento",
+  "Punterie / valvole","Trasmissione","Sospensioni / sterzo","Pneumatici / cerchi","Scarico",
+  "Elettrico","Carrozzeria / accessori","Controlli periodici","Altro (extra utente)"];
+
+// ---- helpers ----
+function esc(s){ return String(s ?? "").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function genVid(){ return "v" + Math.random().toString(16).slice(2,10); }
+function genId(){ return (crypto.randomUUID ? crypto.randomUUID() : "id"+Math.random().toString(16).slice(2)); }
+function num(v){ const n = parseInt(v,10); return isNaN(n) ? null : n; }
+function dec(v){ if(v===""||v==null) return null; const n = parseFloat(String(v).replace(",",".")); return isNaN(n)?null:n; }
+function msToInput(ms){ if(!ms) return ""; const d=new Date(ms); return d.toISOString().slice(0,10); }
+function inputToMs(s){ if(!s) return null; const t=Date.parse(s+"T12:00:00"); return isNaN(t)?null:t; }
+function slugify(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80) || "cliente"; }
+let toastTimer;
+function toast(m){ const el=document.getElementById("toast"); el.textContent=m; el.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2400); }
+
+// ---- auth / state ----
+let KEY = "";
+try { KEY = localStorage.getItem("officinaKey") || ""; } catch(_){}
+function authHeaders(extra){ return Object.assign({ "X-Officina-Key": KEY }, extra||{}); }
+
+async function apiClients(){
+  const r = await fetch(API+"/api/officina/clients", { headers: authHeaders() });
+  if (r.status === 401) throw { auth:true };
+  if (!r.ok) throw new Error("HTTP "+r.status);
+  return (await r.json()).clients || [];
+}
+async function apiLoadClient(slug){
+  const r = await fetch(API+"/api/client?slug="+encodeURIComponent(slug));
+  if (!r.ok) throw new Error("HTTP "+r.status);
+  return await r.json();
+}
+async function apiApply(slug, clientName, ops){
+  const r = await fetch(API+"/api/officina/apply", {
+    method:"POST", headers: authHeaders({ "Content-Type":"application/json" }),
+    body: JSON.stringify({ slug, clientName, ops })
+  });
+  if (r.status === 401) throw { auth:true };
+  if (!r.ok) { let m=""; try{ m=(await r.json()).error||""; }catch(_){} throw new Error(m||("HTTP "+r.status)); }
+  return await r.json();
+}
+
+// ========== LOGIN ==========
+function showLogin(err){
+  document.getElementById("root").innerHTML =
+    '<div class="login"><header><h1>Officina</h1></header>'+
+    '<div class="card"><div class="sub">Inserisci la password dell\'officina per gestire i clienti dal PC.</div>'+
+    '<label>Password</label><input id="pw" type="password" placeholder="password" />'+
+    (err?'<div class="sub" style="color:var(--bad);margin-top:8px">'+esc(err)+'</div>':'')+
+    '<div class="row" style="margin-top:12px"><button id="loginBtn">Entra</button></div></div></div>';
+  const go = async () => {
+    KEY = document.getElementById("pw").value.trim();
+    if (!KEY) return;
+    try { localStorage.setItem("officinaKey", KEY); } catch(_){}
+    try { const c = await apiClients(); showList(c); }
+    catch(e){ if(e&&e.auth) showLogin("Password errata."); else showLogin("Errore di connessione."); }
+  };
+  document.getElementById("loginBtn").onclick = go;
+  document.getElementById("pw").addEventListener("keydown", e => { if(e.key==="Enter") go(); });
+}
+
+// ========== CLIENT LIST ==========
+function showList(clients){
+  let h = '<header><h1>Clienti</h1><button id="newBtn" class="small">+ Nuovo cliente</button></header>';
+  h += '<div class="card">';
+  if (!clients.length) h += '<div class="center">Nessun cliente. Creane uno con “+ Nuovo cliente”.</div>';
+  else clients.forEach(c => {
+    h += '<div class="clientrow" data-slug="'+esc(c.slug)+'">'+
+         '<div><div class="cname">'+esc(c.client)+'</div>'+
+         '<div class="cmeta">'+c.cars+' '+(c.cars===1?'auto':'auto')+' · agg. '+
+         (c.updatedAt?new Date(c.updatedAt).toLocaleDateString("it-IT"):"—")+'</div></div>'+
+         '<div class="spacer"></div><div class="muted">›</div></div>';
+  });
+  h += '</div><div class="row"><button class="ghost small" id="logoutBtn">Esci</button></div>';
+  document.getElementById("root").innerHTML = h;
+  document.querySelectorAll(".clientrow").forEach(el =>
+    el.onclick = () => openClient(el.getAttribute("data-slug")));
+  document.getElementById("newBtn").onclick = newClient;
+  document.getElementById("logoutBtn").onclick = () => {
+    try { localStorage.removeItem("officinaKey"); } catch(_){} KEY=""; showLogin();
+  };
+}
+
+async function openClient(slug){
+  document.getElementById("root").innerHTML = '<div class="center">Carico…</div>';
+  try {
+    const p = await apiLoadClient(slug);
+    editClient(p, false);
+  } catch(e){ toast("Impossibile caricare il cliente"); showListFromServer(); }
+}
+async function showListFromServer(){
+  try { showList(await apiClients()); } catch(e){ if(e&&e.auth) showLogin(); else toast("Errore"); }
+}
+function newClient(){
+  const name = prompt("Nome del nuovo cliente:");
+  if (!name || !name.trim()) return;
+  const profile = { client:name.trim(), slug:slugify(name), updatedAt:Date.now(), vehicles:[] };
+  editClient(profile, true);
+}
+
+// ========== EDITOR ==========
+// Working model M + change tracking. Deletion markers from the file are hidden here.
+let M = null;          // { client, slug, vehicles:[...] }  (alive records only)
+let ORIG_SLUG = "";
+let isNew = false;
+const dirty = { client:false, veh:new Set(), task:new Set(), iv:new Set() };
+const removed = { veh:[], task:[], iv:[] };  // {vid}/{vid,syncId}/{vid,taskSyncId,syncId}
+
+function editClient(profile, created){
+  isNew = created;
+  ORIG_SLUG = profile.slug || slugify(profile.client);
+  M = {
+    client: profile.client || "Cliente",
+    slug: ORIG_SLUG,
+    vehicles: (profile.vehicles||[]).filter(v=>!v.deleted).map(v => ({
+      vid: v.vid || genVid(),
+      name: v.name||"", plate:v.plate||"", brand:v.brand||"", model:v.model||"",
+      variant:v.variant||"", year:v.year??"", odometerKm:v.odometerKm??"",
+      tasks: (v.tasks||[]).filter(t=>!t.deleted).map(t => ({
+        syncId: t.syncId || genId(),
+        name:t.name||"", category:t.category||"", km:t.km??"", months:t.months??"",
+        recKm:t.recKm??"", recMonths:t.recMonths??"", lastKm:t.lastKm??"",
+        lastDate: t.lastDate||null, notes:t.notes||"", enabled: t.enabled!==false,
+        interventions: (t.interventions||[]).filter(i=>!i.deleted).map(i => ({
+          syncId:i.syncId||genId(), brand:i.brand||"", model:i.model||"", partCode:i.partCode||"",
+          supplier:i.supplier||"", priceEuro:i.priceEuro??"", installedAtKm:i.installedAtKm??"",
+          installedAtDate:i.installedAtDate||null, notes:i.notes||"",
+          warrantyMonths:i.warrantyMonths??"", receiptNumber:i.receiptNumber||"",
+        })),
+      })),
+    })),
+  };
+  dirty.client = created; dirty.veh.clear(); dirty.task.clear(); dirty.iv.clear();
+  removed.veh=[]; removed.task=[]; removed.iv=[];
+  if (created && M.vehicles.length===0) addVehicle(false);
+  renderEditor();
+}
+
+function catOptions(sel){
+  return CATEGORIES.map(c => '<option'+(c===sel?' selected':'')+'>'+esc(c)+'</option>').join("");
+}
+
+function renderEditor(){
+  let h = '<header><button class="ghost small" id="backBtn">‹ Clienti</button>'+
+          '<h1 style="font-size:1.1rem">'+esc(M.client)+'</h1></header>';
+  h += '<div class="card"><label>Nome cliente</label>'+
+       '<input data-k="client" value="'+esc(M.client)+'" />'+
+       (isNew?'<div class="sub" style="margin-top:6px">Link cliente: <span class="pill">…/?c='+esc(M.slug)+'</span></div>':'')+
+       '</div>';
+
+  M.vehicles.forEach((v,vi) => {
+    h += '<div class="card veh-card" data-vi="'+vi+'">';
+    h += '<div class="row"><strong>🚗 Auto '+(vi+1)+'</strong><div class="spacer"></div>'+
+         '<button class="danger" data-del-veh="'+vi+'">Elimina auto</button></div>';
+    h += '<div class="grid">'+
+      field(v,vi,null,null,"name","Nome / modello","text")+
+      field(v,vi,null,null,"plate","Targa","text")+
+      field(v,vi,null,null,"brand","Marca","text")+
+      field(v,vi,null,null,"model","Modello","text")+
+      field(v,vi,null,null,"year","Anno","number")+
+      field(v,vi,null,null,"odometerKm","Km attuali","number")+
+      '</div>';
+
+    h += '<div class="section-title">Tagliandi / manutenzioni</div>';
+    v.tasks.forEach((t,ti) => {
+      h += '<div class="task-card" data-vi="'+vi+'" data-ti="'+ti+'">';
+      h += '<div class="task-head"><span class="tname">'+esc(t.name||"(nuovo tagliando)")+'</span>'+
+           (!t.enabled?'<span class="pill warnpill">disattivo</span>':'')+
+           '<button class="danger" data-del-task="'+vi+'_'+ti+'">Elimina</button></div>';
+      h += '<div class="grid">'+
+        tfield(vi,ti,"name","Nome","text")+
+        '<div><label>Categoria</label><select data-vi="'+vi+'" data-ti="'+ti+'" data-tk="category">'+
+          catOptions(t.category)+'</select></div>'+
+        tfield(vi,ti,"km","Intervallo km (casa madre)","number")+
+        tfield(vi,ti,"months","Intervallo mesi (casa madre)","number")+
+        tfield(vi,ti,"recKm","Km consigliati (tuo)","number")+
+        tfield(vi,ti,"recMonths","Mesi consigliati (tuo)","number")+
+        tfield(vi,ti,"lastKm","Ultima fatta a km","number")+
+        '<div><label>Ultima fatta il</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="lastDate" value="'+msToInput(t.lastDate)+'" /></div>'+
+        '</div>';
+      h += '<label>Note</label><textarea data-vi="'+vi+'" data-ti="'+ti+'" data-tk="notes">'+esc(t.notes)+'</textarea>';
+      h += '<div class="chk"><input type="checkbox" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="enabled" '+(t.enabled?'checked':'')+' /><span>Attivo (mostrato al cliente)</span></div>';
+
+      // interventions
+      if (t.interventions.length) h += '<div class="section-title" style="font-size:.9rem">Interventi registrati</div>';
+      t.interventions.forEach((iv,ii) => {
+        h += '<div class="iv-card" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'">';
+        h += '<div class="row"><strong>🔧 '+esc(iv.brand||"intervento")+'</strong><div class="spacer"></div>'+
+             '<button class="danger" data-del-iv="'+vi+'_'+ti+'_'+ii+'">Elimina</button></div>';
+        h += '<div class="grid">'+
+          ifield(vi,ti,ii,"brand","Marca","text")+
+          ifield(vi,ti,ii,"model","Modello","text")+
+          ifield(vi,ti,ii,"partCode","Codice","text")+
+          ifield(vi,ti,ii,"supplier","Fornitore","text")+
+          ifield(vi,ti,ii,"priceEuro","Prezzo €","text")+
+          ifield(vi,ti,ii,"installedAtKm","Montato a km","number")+
+          '<div><label>Data</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="installedAtDate" value="'+msToInput(iv.installedAtDate)+'" /></div>'+
+          ifield(vi,ti,ii,"warrantyMonths","Garanzia (mesi)","number")+
+          '</div>';
+        h += '</div>';
+      });
+      h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-iv="'+vi+'_'+ti+'">+ Intervento</button></div>';
+      h += '</div>'; // task-card
+    });
+    h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-task="'+vi+'">+ Aggiungi tagliando</button></div>';
+    h += '</div>'; // veh-card
+  });
+
+  h += '<div class="row"><button class="ghost" id="addVehBtn">+ Aggiungi auto</button></div>';
+  document.getElementById("root").innerHTML = h;
+
+  // save bar
+  const bar = document.createElement("div");
+  bar.className = "savebar";
+  const n = dirtyCount();
+  bar.innerHTML = '<div class="inner"><div class="muted">'+(n?('Modifiche non salvate: '+n):'Nessuna modifica')+'</div>'+
+    '<div class="spacer"></div><button id="saveBtn"'+(n?'':' disabled')+'>Salva</button></div>';
+  document.body.appendChild(bar);
+
+  bindEditor();
+}
+
+function field(v,vi,_a,_b,k,label,type){
+  return '<div><label>'+esc(label)+'</label><input type="'+type+'" data-vi="'+vi+'" data-vk="'+k+'" value="'+esc(v[k])+'" /></div>';
+}
+function tfield(vi,ti,k,label,type){
+  const t = M.vehicles[vi].tasks[ti];
+  return '<div><label>'+esc(label)+'</label><input type="'+type+'" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="'+k+'" value="'+esc(t[k])+'" /></div>';
+}
+function ifield(vi,ti,ii,k,label,type){
+  const iv = M.vehicles[vi].tasks[ti].interventions[ii];
+  return '<div><label>'+esc(label)+'</label><input type="'+type+'" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="'+k+'" value="'+esc(iv[k])+'" /></div>';
+}
+
+function dirtyCount(){
+  return (dirty.client?1:0) + dirty.veh.size + dirty.task.size + dirty.iv.size +
+    removed.veh.length + removed.task.length + removed.iv.length;
+}
+
+function bindEditor(){
+  document.getElementById("backBtn").onclick = () => {
+    if (dirtyCount() && !confirm("Ci sono modifiche non salvate. Uscire senza salvare?")) return;
+    cleanup(); showListFromServer();
+  };
+  document.getElementById("addVehBtn").onclick = () => addVehicle(true);
+  document.getElementById("saveBtn").onclick = save;
+
+  // live edits
+  document.querySelectorAll('[data-vk]').forEach(el => el.addEventListener("input", e => {
+    const vi=+el.dataset.vi, k=el.dataset.vk; M.vehicles[vi][k]=el.value; dirty.veh.add(M.vehicles[vi].vid); refreshBar();
+  }));
+  document.querySelectorAll('[data-tk]').forEach(el => {
+    const ev = (el.type==="checkbox") ? "change" : "input";
+    el.addEventListener(ev, () => {
+      const vi=+el.dataset.vi, ti=+el.dataset.ti, k=el.dataset.tk, t=M.vehicles[vi].tasks[ti];
+      if (k==="enabled") t.enabled = el.checked;
+      else if (k==="lastDate") t.lastDate = inputToMs(el.value);
+      else t[k]=el.value;
+      dirty.task.add(t.syncId); refreshBar();
+    });
+  });
+  document.querySelectorAll('[data-ik]').forEach(el => el.addEventListener("input", () => {
+    const vi=+el.dataset.vi, ti=+el.dataset.ti, ii=+el.dataset.ii, k=el.dataset.ik;
+    const iv=M.vehicles[vi].tasks[ti].interventions[ii];
+    if (k==="installedAtDate") iv.installedAtDate = inputToMs(el.value); else iv[k]=el.value;
+    dirty.iv.add(iv.syncId); refreshBar();
+  }));
+
+  document.querySelectorAll('[data-del-veh]').forEach(el => el.onclick = () => {
+    const vi=+el.dataset.delVeh, v=M.vehicles[vi];
+    if (!confirm("Eliminare l'auto \""+(v.name||"")+"\" e i suoi dati?")) return;
+    if (!isNewVid(v.vid)) removed.veh.push({vid:v.vid});
+    M.vehicles.splice(vi,1); renderEditor();
+  });
+  document.querySelectorAll('[data-del-task]').forEach(el => el.onclick = () => {
+    const [vi,ti]=el.dataset.delTask.split("_").map(Number); const v=M.vehicles[vi], t=v.tasks[ti];
+    if (!confirm("Eliminare il tagliando \""+(t.name||"")+"\"?")) return;
+    if (!isNewId(t.syncId)) removed.task.push({vid:v.vid, syncId:t.syncId});
+    v.tasks.splice(ti,1); renderEditor();
+  });
+  document.querySelectorAll('[data-del-iv]').forEach(el => el.onclick = () => {
+    const [vi,ti,ii]=el.dataset.delIv.split("_").map(Number); const v=M.vehicles[vi], t=v.tasks[ti], iv=t.interventions[ii];
+    if (!isNewId(iv.syncId)) removed.iv.push({vid:v.vid, taskSyncId:t.syncId, syncId:iv.syncId});
+    t.interventions.splice(ii,1); renderEditor();
+  });
+  document.querySelectorAll('[data-add-task]').forEach(el => el.onclick = () => {
+    const vi=+el.dataset.addTask;
+    M.vehicles[vi].tasks.push({ syncId:genId(), name:"", category:CATEGORIES[0], km:"", months:"",
+      recKm:"", recMonths:"", lastKm:"", lastDate:null, notes:"", enabled:true, interventions:[], _new:true });
+    dirty.task.add(M.vehicles[vi].tasks[M.vehicles[vi].tasks.length-1].syncId); renderEditor();
+  });
+  document.querySelectorAll('[data-add-iv]').forEach(el => el.onclick = () => {
+    const [vi,ti]=el.dataset.addIv.split("_").map(Number); const t=M.vehicles[vi].tasks[ti];
+    t.interventions.push({ syncId:genId(), brand:"", model:"", partCode:"", supplier:"", priceEuro:"",
+      installedAtKm: M.vehicles[vi].odometerKm||"", installedAtDate:Date.now(), notes:"", warrantyMonths:"", _new:true });
+    dirty.iv.add(t.interventions[t.interventions.length-1].syncId); renderEditor();
+  });
+
+  document.querySelector('[data-k="client"]').addEventListener("input", e => {
+    M.client = e.target.value; if (isNew) M.slug = slugify(M.client); dirty.client=true; refreshBar();
+  });
+}
+
+const newVids = new Set(), newIds = new Set();
+function isNewVid(id){ return newVids.has(id); }
+function isNewId(id){ return newIds.has(id); }
+
+function addVehicle(rerender){
+  const vid = genVid(); newVids.add(vid);
+  M.vehicles.push({ vid, name:"", plate:"", brand:"", model:"", variant:"", year:"", odometerKm:"", tasks:[] });
+  dirty.veh.add(vid);
+  if (rerender) renderEditor();
+}
+
+function refreshBar(){
+  const bar = document.querySelector(".savebar"); if (!bar) return;
+  const n = dirtyCount();
+  bar.querySelector(".muted").textContent = n ? ("Modifiche non salvate: "+n) : "Nessuna modifica";
+  bar.querySelector("#saveBtn").disabled = !n;
+}
+function cleanup(){ const b=document.querySelector(".savebar"); if(b) b.remove(); }
+
+// Build record-level ops from the changed records only, then send them.
+function buildOps(){
+  const ops = [];
+  M.vehicles.forEach(v => {
+    if (dirty.veh.has(v.vid)) {
+      ops.push({ t:"vehicle.upsert", vid:v.vid, fields:{
+        name:v.name, plate:v.plate, brand:v.brand, model:v.model, variant:v.variant,
+        year:num(v.year), odometerKm:num(v.odometerKm) } });
+    }
+    v.tasks.forEach(t => {
+      if (dirty.task.has(t.syncId)) {
+        ops.push({ t:"task.upsert", vid:v.vid, syncId:t.syncId, fields:{
+          name:t.name, category:t.category, km:num(t.km), months:num(t.months),
+          recKm:num(t.recKm), recMonths:num(t.recMonths), lastKm:num(t.lastKm),
+          lastDate:t.lastDate, notes:t.notes, enabled:t.enabled } });
+      }
+      t.interventions.forEach(iv => {
+        if (dirty.iv.has(iv.syncId)) {
+          ops.push({ t:"intervention.upsert", vid:v.vid, taskSyncId:t.syncId, syncId:iv.syncId, fields:{
+            brand:iv.brand, model:iv.model, partCode:iv.partCode, supplier:iv.supplier,
+            priceEuro:dec(iv.priceEuro), installedAtKm:num(iv.installedAtKm),
+            installedAtDate:iv.installedAtDate||Date.now(), notes:iv.notes,
+            warrantyMonths:num(iv.warrantyMonths) } });
+        }
+      });
+    });
+  });
+  removed.iv.forEach(r => ops.push({ t:"intervention.delete", vid:r.vid, taskSyncId:r.taskSyncId, syncId:r.syncId }));
+  removed.task.forEach(r => ops.push({ t:"task.delete", vid:r.vid, syncId:r.syncId }));
+  removed.veh.forEach(r => ops.push({ t:"vehicle.delete", vid:r.vid }));
+  return ops;
+}
+
+async function save(){
+  const btn = document.getElementById("saveBtn"); btn.disabled=true; btn.textContent="Salvo…";
+  const ops = buildOps();
+  try {
+    await apiApply(M.slug, M.client, ops);
+    toast("Salvato ✓");
+    cleanup();
+    // reload the fresh version so the editor shows merged state & resets dirty tracking.
+    const p = await apiLoadClient(M.slug);
+    isNew = false; editClient(p, false);
+  } catch(e){
+    if (e&&e.auth){ showLogin("Sessione scaduta: reinserisci la password."); return; }
+    toast("Errore nel salvataggio: "+(e.message||"")); btn.disabled=false; btn.textContent="Salva";
+  }
+}
+
+// ========== boot ==========
+(async function(){
+  if (!KEY) { showLogin(); return; }
+  try { showList(await apiClients()); }
+  catch(e){ if(e&&e.auth) showLogin(); else showLogin("Errore di connessione."); }
+})();
+</script>
+</body>
+</html>
