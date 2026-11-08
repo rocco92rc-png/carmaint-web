@@ -391,18 +391,18 @@ function bindEditor(){
   document.querySelectorAll('[data-del-veh]').forEach(el => el.onclick = () => {
     const vi=+el.dataset.delVeh, v=M.vehicles[vi];
     if (!confirm("Eliminare l'auto \""+(v.name||"")+"\" e i suoi dati?")) return;
-    if (!isNewVid(v.vid)) removed.veh.push({vid:v.vid});
+    if (!isNewVid(v.vid)) removed.veh.push({vid:v.vid, vname:v.name});
     M.vehicles.splice(vi,1); renderEditor();
   });
   document.querySelectorAll('[data-del-task]').forEach(el => el.onclick = () => {
     const [vi,ti]=el.dataset.delTask.split("_").map(Number); const v=M.vehicles[vi], t=v.tasks[ti];
     if (!confirm("Eliminare il tagliando \""+(t.name||"")+"\"?")) return;
-    if (!isNewId(t.syncId)) removed.task.push({vid:v.vid, syncId:t.syncId});
+    if (!isNewId(t.syncId)) removed.task.push({vid:v.vid, vname:v.name, syncId:t.syncId, tname:t.name});
     v.tasks.splice(ti,1); renderEditor();
   });
   document.querySelectorAll('[data-del-iv]').forEach(el => el.onclick = () => {
     const [vi,ti,ii]=el.dataset.delIv.split("_").map(Number); const v=M.vehicles[vi], t=v.tasks[ti], iv=t.interventions[ii];
-    if (!isNewId(iv.syncId)) removed.iv.push({vid:v.vid, taskSyncId:t.syncId, syncId:iv.syncId});
+    if (!isNewId(iv.syncId)) removed.iv.push({vid:v.vid, vname:v.name, taskSyncId:t.syncId, tname:t.name, syncId:iv.syncId});
     t.interventions.splice(ii,1); renderEditor();
   });
   document.querySelectorAll('[data-add-task]').forEach(el => el.onclick = () => {
@@ -456,20 +456,20 @@ function buildOps(){
   const ops = [];
   M.vehicles.forEach(v => {
     if (dirty.veh.has(v.vid)) {
-      ops.push({ t:"vehicle.upsert", vid:v.vid, fields:{
+      ops.push({ t:"vehicle.upsert", vid:v.vid, vname:v.name, fields:{
         name:v.name, plate:v.plate, brand:v.brand, model:v.model, variant:v.variant,
         year:num(v.year), odometerKm:num(v.odometerKm) } });
     }
     v.tasks.forEach(t => {
       if (dirty.task.has(t.syncId)) {
-        ops.push({ t:"task.upsert", vid:v.vid, syncId:t.syncId, fields:{
+        ops.push({ t:"task.upsert", vid:v.vid, vname:v.name, syncId:t.syncId, tname:t.name, fields:{
           name:t.name, category:t.category, km:num(t.km), months:num(t.months),
           recKm:num(t.recKm), recMonths:num(t.recMonths), lastKm:num(t.lastKm),
           lastDate:t.lastDate, notes:t.notes, enabled:t.enabled } });
       }
       t.interventions.forEach(iv => {
         if (dirty.iv.has(iv.syncId)) {
-          ops.push({ t:"intervention.upsert", vid:v.vid, taskSyncId:t.syncId, syncId:iv.syncId, fields:{
+          ops.push({ t:"intervention.upsert", vid:v.vid, vname:v.name, taskSyncId:t.syncId, tname:t.name, syncId:iv.syncId, fields:{
             brand:iv.brand, model:iv.model, partCode:iv.partCode, supplier:iv.supplier,
             priceEuro:dec(iv.priceEuro), installedAtKm:num(iv.installedAtKm),
             installedAtDate:iv.installedAtDate||Date.now(), notes:iv.notes,
@@ -478,15 +478,15 @@ function buildOps(){
       });
       (t.checks||[]).forEach(c => {
         if (c._new && (String(c.km).trim()!=="" || (c.note && c.note.trim()))) {
-          ops.push({ t:"check.add", vid:v.vid, syncId:t.syncId,
+          ops.push({ t:"check.add", vid:v.vid, vname:v.name, syncId:t.syncId, tname:t.name,
             km:num(c.km), date:c.date||Date.now(), note:(c.note||"").trim()||null });
         }
       });
     });
   });
-  removed.iv.forEach(r => ops.push({ t:"intervention.delete", vid:r.vid, taskSyncId:r.taskSyncId, syncId:r.syncId }));
-  removed.task.forEach(r => ops.push({ t:"task.delete", vid:r.vid, syncId:r.syncId }));
-  removed.veh.forEach(r => ops.push({ t:"vehicle.delete", vid:r.vid }));
+  removed.iv.forEach(r => ops.push({ t:"intervention.delete", vid:r.vid, vname:r.vname, taskSyncId:r.taskSyncId, tname:r.tname, syncId:r.syncId }));
+  removed.task.forEach(r => ops.push({ t:"task.delete", vid:r.vid, vname:r.vname, syncId:r.syncId, tname:r.tname }));
+  removed.veh.forEach(r => ops.push({ t:"vehicle.delete", vid:r.vid, vname:r.vname }));
   return ops;
 }
 
