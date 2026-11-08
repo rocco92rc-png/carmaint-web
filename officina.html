@@ -276,6 +276,9 @@ function renderEditor(){
           '<div><label>Data</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="installedAtDate" value="'+msToInput(iv.installedAtDate)+'" /></div>'+
           ifield(vi,ti,ii,"warrantyMonths","Garanzia (mesi)","number")+
           '</div>';
+        h += '<label>Lavoro svolto / note (cosa hai fatto)</label>'+
+             '<textarea data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="notes" '+
+             'placeholder="es. sostituite pastiglie anteriori, controllati dischi">'+esc(iv.notes)+'</textarea>';
         h += '</div>';
       });
       h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-iv="'+vi+'_'+ti+'">+ Intervento</button></div>';
