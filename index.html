@@ -125,6 +125,24 @@ function checksHtml(t) {
     return '<div class="check">✓ Verificato: ' + esc(when) + note + '</div>';
   }).join("");
 }
+function fmtEuro(n){ return n==null ? "" : Number(n).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2}) + " €"; }
+// Storico interventi (ricambi montati) sincronizzati dall'officina: marca/modello/prezzo.
+function interventionsHtml(t) {
+  const iv = Array.isArray(t.interventions) ? t.interventions : [];
+  if (!iv.length) return "";
+  return iv.slice()
+    .sort((a,b) => (b.installedAtDate||0) - (a.installedAtDate||0))
+    .map(x => {
+      const head = [x.installedAtDate ? new Date(x.installedAtDate).toLocaleDateString("it-IT") : null,
+                    x.installedAtKm != null ? fmtKm(x.installedAtKm) : null,
+                    x.brand || null].filter(Boolean).map(esc).join(" · ");
+      const sub = [x.model || null,
+                   x.partCode ? "cod. " + x.partCode : null,
+                   x.supplier || null,
+                   x.priceEuro != null ? fmtEuro(x.priceEuro) : null].filter(Boolean).map(esc).join(" · ");
+      return '<div class="check">🔧 ' + head + (sub ? '<br><small>' + sub + '</small>' : '') + '</div>';
+    }).join("");
+}
 
 // ---- data source ----
 const params = new URLSearchParams(location.search);
@@ -143,7 +161,8 @@ const MOCK_DATA = {
   vehicles: [{
     vid: "v1a2b3c4", name: "Lancia Y", plate: "AB123CD", brand: "Lancia", model: "Ypsilon", year: 2013, odometerKm: 98000,
     tasks: [
-      { name:"Cambio olio motore", category:"Olio motore", km:30000, months:24, recKm:15000, recMonths:12, lastKm:90000, lastDate: Date.now()-200*DAY, notes:"Con filtro olio. Urbano: ogni 12 mesi.", enabled:true },
+      { name:"Cambio olio motore", category:"Olio motore", km:30000, months:24, recKm:15000, recMonths:12, lastKm:90000, lastDate: Date.now()-200*DAY, notes:"Con filtro olio. Urbano: ogni 12 mesi.", enabled:true,
+        interventions:[ { syncId:"iv1", brand:"Selenia", model:"20K 10W-40", partCode:"OL-20K", supplier:"Ricambi Rossi", priceEuro:48.5, installedAtKm:90000, installedAtDate: Date.now()-200*DAY, updatedAt: Date.now()-200*DAY } ] },
       { name:"Candele", category:"Accensione", km:30000, lastKm:70000, lastDate: Date.now()-900*DAY, enabled:true,
         checks:[ { km:95000, date: Date.now()-40*DAY, note:"ancora buone, sostituire al prossimo tagliando" } ] },
       { name:"Cinghia distribuzione", category:"Distribuzione", km:120000, months:60, lastKm:20000, lastDate: Date.now()-1500*DAY, enabled:true },
@@ -223,7 +242,7 @@ function renderVehicle(v, idx) {
       (prudent ? '<span class="pill">consigliato</span>' : '') + '</div>' +
       '<div class="detail">' + (interval ? esc("Casa madre: " + interval) + ' · ' : '') +
       (prudent ? esc("consigliato: " + prudent) + ' · ' : '') + esc(last) + '</div>' +
-      checksHtml(t) + '</div></div>';
+      interventionsHtml(t) + checksHtml(t) + '</div></div>';
   }
   html += '</div>';
   return html;
