@@ -200,6 +200,7 @@ function editClient(profile, created){
         name:t.name||"", category:t.category||"", km:t.km??"", months:t.months??"",
         recKm:t.recKm??"", recMonths:t.recMonths??"", lastKm:t.lastKm??"",
         lastDate: t.lastDate||null, notes:t.notes||"", enabled: t.enabled!==false,
+        checks: (t.checks||[]).map(c => ({ km:c.km??"", date:c.date||null, note:c.note||"", _new:false })),
         interventions: (t.interventions||[]).filter(i=>!i.deleted).map(i => ({
           syncId:i.syncId||genId(), brand:i.brand||"", model:i.model||"", partCode:i.partCode||"",
           supplier:i.supplier||"", priceEuro:i.priceEuro??"", installedAtKm:i.installedAtKm??"",
@@ -282,6 +283,30 @@ function renderEditor(){
         h += '</div>';
       });
       h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-iv="'+vi+'_'+ti+'">+ Intervento</button></div>';
+
+      // controlli "verificato, ancora buono" (km + data + nota)
+      h += '<div class="section-title" style="font-size:.9rem">Controlli (verificato, ancora buono)</div>';
+      t.checks.forEach((c,ci) => {
+        if (c._new) {
+          h += '<div class="iv-card" data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'">';
+          h += '<div class="row"><strong>✓ Nuovo controllo</strong><div class="spacer"></div>'+
+               '<button class="danger" data-del-check="'+vi+'_'+ti+'_'+ci+'">Rimuovi</button></div>';
+          h += '<div class="grid">'+
+            '<div><label>Km</label><input type="number" data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="km" value="'+esc(c.km)+'" /></div>'+
+            '<div><label>Data</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="date" value="'+msToInput(c.date)+'" /></div>'+
+            '</div>';
+          h += '<label>Nota</label><textarea data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="note" '+
+               'placeholder="es. ancora buone, sostituire al prossimo tagliando">'+esc(c.note)+'</textarea>';
+          h += '</div>';
+        } else {
+          const when = [(c.km!=="" && c.km!=null) ? (Number(c.km).toLocaleString("it-IT")+" km") : null,
+                        c.date ? new Date(c.date).toLocaleDateString("it-IT") : null].filter(Boolean).join(" · ");
+          const nt = (c.note && String(c.note).trim()) ? " — "+esc(c.note) : "";
+          h += '<div class="muted" style="font-size:.86rem;padding:4px 2px">✓ '+esc(when)+nt+'</div>';
+        }
+      });
+      h += '<div class="row" style="margin-top:6px"><button class="ghost small" data-add-check="'+vi+'_'+ti+'">+ Aggiungi controllo</button></div>';
+
       h += '</div>'; // task-card
     });
     h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-task="'+vi+'">+ Aggiungi tagliando</button></div>';
@@ -314,8 +339,15 @@ function ifield(vi,ti,ii,k,label,type){
   return '<div><label>'+esc(label)+'</label><input type="'+type+'" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="'+k+'" value="'+esc(iv[k])+'" /></div>';
 }
 
+function newCheckCount(){
+  let n=0;
+  M.vehicles.forEach(v => v.tasks.forEach(t => (t.checks||[]).forEach(c => {
+    if (c._new && (String(c.km).trim()!=="" || (c.note && c.note.trim()))) n++;
+  })));
+  return n;
+}
 function dirtyCount(){
-  return (dirty.client?1:0) + dirty.veh.size + dirty.task.size + dirty.iv.size +
+  return (dirty.client?1:0) + dirty.veh.size + dirty.task.size + dirty.iv.size + newCheckCount() +
     removed.veh.length + removed.task.length + removed.iv.length;
 }
 
@@ -347,6 +379,12 @@ function bindEditor(){
     if (k==="installedAtDate") iv.installedAtDate = inputToMs(el.value); else iv[k]=el.value;
     dirty.iv.add(iv.syncId); refreshBar();
   }));
+  document.querySelectorAll('[data-ck]').forEach(el => el.addEventListener("input", () => {
+    const vi=+el.dataset.vi, ti=+el.dataset.ti, ci=+el.dataset.ci, k=el.dataset.ck;
+    const c=M.vehicles[vi].tasks[ti].checks[ci];
+    if (k==="date") c.date = inputToMs(el.value); else c[k]=el.value;
+    refreshBar();
+  }));
 
   document.querySelectorAll('[data-del-veh]').forEach(el => el.onclick = () => {
     const vi=+el.dataset.delVeh, v=M.vehicles[vi];
@@ -368,7 +406,7 @@ function bindEditor(){
   document.querySelectorAll('[data-add-task]').forEach(el => el.onclick = () => {
     const vi=+el.dataset.addTask;
     M.vehicles[vi].tasks.push({ syncId:genId(), name:"", category:CATEGORIES[0], km:"", months:"",
-      recKm:"", recMonths:"", lastKm:"", lastDate:null, notes:"", enabled:true, interventions:[], _new:true });
+      recKm:"", recMonths:"", lastKm:"", lastDate:null, notes:"", enabled:true, interventions:[], checks:[], _new:true });
     dirty.task.add(M.vehicles[vi].tasks[M.vehicles[vi].tasks.length-1].syncId); renderEditor();
   });
   document.querySelectorAll('[data-add-iv]').forEach(el => el.onclick = () => {
@@ -376,6 +414,15 @@ function bindEditor(){
     t.interventions.push({ syncId:genId(), brand:"", model:"", partCode:"", supplier:"", priceEuro:"",
       installedAtKm: M.vehicles[vi].odometerKm||"", installedAtDate:Date.now(), notes:"", warrantyMonths:"", _new:true });
     dirty.iv.add(t.interventions[t.interventions.length-1].syncId); renderEditor();
+  });
+  document.querySelectorAll('[data-add-check]').forEach(el => el.onclick = () => {
+    const [vi,ti]=el.dataset.addCheck.split("_").map(Number);
+    M.vehicles[vi].tasks[ti].checks.push({ km: M.vehicles[vi].odometerKm||"", date:Date.now(), note:"", _new:true });
+    renderEditor();
+  });
+  document.querySelectorAll('[data-del-check]').forEach(el => el.onclick = () => {
+    const [vi,ti,ci]=el.dataset.delCheck.split("_").map(Number);
+    M.vehicles[vi].tasks[ti].checks.splice(ci,1); renderEditor();
   });
 
   document.querySelector('[data-k="client"]').addEventListener("input", e => {
@@ -425,6 +472,12 @@ function buildOps(){
             priceEuro:dec(iv.priceEuro), installedAtKm:num(iv.installedAtKm),
             installedAtDate:iv.installedAtDate||Date.now(), notes:iv.notes,
             warrantyMonths:num(iv.warrantyMonths) } });
+        }
+      });
+      (t.checks||[]).forEach(c => {
+        if (c._new && (String(c.km).trim()!=="" || (c.note && c.note.trim()))) {
+          ops.push({ t:"check.add", vid:v.vid, syncId:t.syncId,
+            km:num(c.km), date:c.date||Date.now(), note:(c.note||"").trim()||null });
         }
       });
     });
