@@ -140,7 +140,8 @@ function interventionsHtml(t) {
                    x.partCode ? "cod. " + x.partCode : null,
                    x.supplier || null,
                    x.priceEuro != null ? fmtEuro(x.priceEuro) : null].filter(Boolean).map(esc).join(" · ");
-      return '<div class="check">🔧 ' + head + (sub ? '<br><small>' + sub + '</small>' : '') + '</div>';
+      const note = (x.notes && String(x.notes).trim()) ? '<br>' + esc(x.notes) : '';
+      return '<div class="check">🔧 ' + head + (sub ? '<br><small>' + sub + '</small>' : '') + note + '</div>';
     }).join("");
 }
 
