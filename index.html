@@ -64,6 +64,55 @@
     :root { --bg:#f3f4f6; --card:#fff; --card2:#f0f2f5; --text:#1a1c20; --muted:#5f6670;
             --line:#e3e6ea; --primary-ct:#e4edff; --check:#2f7d6a; }
   }
+  .rcpt-wrap { margin-top: 7px; }
+  .rcpt { width: 128px; height: 92px; object-fit: cover; border-radius: 9px;
+    border: 1px solid var(--line); cursor: zoom-in; background:#0a0c10; display:block; }
+  #lightbox { position: fixed; inset: 0; z-index: 90; display: none; align-items: center;
+    justify-content: center; background: rgba(0,0,0,.86); padding: 18px; cursor: zoom-out; }
+  #lightbox.open { display: flex; }
+  #lightbox img { max-width: 100%; max-height: 100%; border-radius: 10px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+  /* --- Scheda a categorie (parti) --- */
+  .scheda { margin: 2px 0 6px; display: flex; flex-direction: column; gap: 12px; }
+  .statusline { display: flex; flex-wrap: wrap; gap: 14px; font-size: .82rem; font-weight: 600; }
+  .mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  @media (min-width: 480px) { .mgrid { grid-template-columns: repeat(4, 1fr); } }
+  .mcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 8px; cursor: pointer; }
+  .pic { position: relative; width: 100%; aspect-ratio: 1/1; border-radius: 10px;
+    overflow: hidden; background: #0a0c10; }
+  .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .pdot { position: absolute; top: 8px; right: 8px; width: 13px; height: 13px;
+    border-radius: 50%; border: 2px solid #0a0c10; }
+  .mbadge { position: absolute; top: 6px; left: 6px; min-width: 20px; height: 20px; padding: 0 5px;
+    border-radius: 999px; color: #fff; font-size: .75rem; font-weight: 800; line-height: 20px; text-align: center; }
+  .mlab { font-size: .82rem; font-weight: 600; margin-top: 7px; line-height: 1.2; }
+  .msub { font-size: .74rem; color: var(--muted); margin-top: 1px; }
+  .wrench { width: 100%; height: 100%; display: flex; align-items: center;
+    justify-content: center; color: #6b7280; font-size: 1.7rem; }
+  #partsheet { position: fixed; inset: 0; z-index: 95; display: none; align-items: flex-end;
+    justify-content: center; background: rgba(0,0,0,.6); }
+  #partsheet.open { display: flex; }
+  #partsheet .sheet { background: var(--card); border: 1px solid var(--line);
+    border-radius: 20px 20px 0 0; width: 100%; max-width: 640px;
+    padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 86vh; overflow: auto; }
+  #partsheet .ph-img { width: 100%; aspect-ratio: 16 / 10; border-radius: 14px; overflow: hidden;
+    background: #0a0c10; margin-bottom: 12px; }
+  #partsheet .ph-img img { width: 100%; height: 100%; object-fit: cover; }
+  #partsheet .ph-top { display: flex; align-items: center; gap: 10px; }
+  #partsheet .ph-title { font-size: 1.15rem; font-weight: 800; flex: 1; min-width: 0; }
+  #partsheet .ph-x { background: var(--card2); color: var(--text); width: 34px; height: 34px;
+    border-radius: 50%; font-size: 1rem; padding: 0; }
+  .ph-pill { display: inline-block; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .ph-row { color: var(--muted); font-size: .9rem; margin-top: 8px; }
+  #partsheet .ph-img.sm { width: 46px; height: 46px; aspect-ratio: 1 / 1; margin: 0; flex: 0 0 auto; }
+  .pic.sm { width: 46px; height: 46px; flex: 0 0 auto; }
+  .prows { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .prow { display: flex; gap: 10px; align-items: flex-start; padding-top: 10px; border-top: 1px solid var(--line); }
+  .prow:first-child { border-top: 0; padding-top: 0; }
+  .pbody { flex: 1; min-width: 0; }
+  .pname { font-weight: 600; font-size: .95rem; }
+  .prow-info { color: var(--muted); font-size: .84rem; margin-top: 3px; }
 </style>
 </head>
 <body>
@@ -100,6 +149,16 @@ function detailText(c) {
   return "";
 }
 function dotColor(s){ return s==="OVERDUE"?"var(--bad)" : s==="DUE_SOON"?"var(--warn)" : s==="UPCOMING"?"var(--soon)" : "var(--ok)"; }
+// Promemoria personalizzato impostato dall'officina ("ricontrolla tra… km / … mesi").
+function reminderHtml(t) {
+  if (t.remKm == null && t.remDate == null) return "";
+  const bits = [];
+  if (t.remKm != null) bits.push("a " + fmtKm(t.remKm));
+  if (t.remDate != null) bits.push("entro il " + new Date(t.remDate).toLocaleDateString("it-IT"));
+  let line = "⏰ Promemoria: " + bits.join(" · ");
+  if (t.remNote) line += " — " + t.remNote;
+  return '<div class="detail">' + esc(line) + '</div>';
+}
 function everyStr(km, months) {
   const parts = [];
   if (km) parts.push("ogni " + fmtKm(km));
@@ -109,6 +168,134 @@ function everyStr(km, months) {
   return parts.join(" / ");
 }
 function esc(s){ return String(s ?? "").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function zoomImg(src){ var lb=document.getElementById('lightbox'); lb.querySelector('img').src=src; lb.classList.add('open'); }
+
+// ---- Scheda a categorie: mappa manutenzione -> icona parte ----
+const PART_ICONS = new Set(["alternatore","ammortizzatori","batteria","candele","candelette",
+  "cinghia_servizi","clima","dischi","distribuzione","fap","filtro_abitacolo","filtro_aria",
+  "filtro_carburante","filtro_olio","frizione","gomme","lavavetri","liquido_freni","luci","olio",
+  "olio_cambio","pastiglie","pompa_acqua","raffreddamento","revisione","scarico","tagliando","tergicristalli"]);
+// L'ordine conta: le regole piu' specifiche vanno prima.
+const ICON_RULES = [
+  [/filtro\s*olio/i, "filtro_olio"],
+  [/olio\s*cambio|cambio\b.*\bcambio/i, "olio_cambio"],
+  [/olio|lubrific/i, "olio"],
+  [/candelett|preriscald/i, "candelette"],
+  [/candele|bobin|accension/i, "candele"],
+  [/distribuzione/i, "distribuzione"],
+  [/serviz/i, "cinghia_servizi"],
+  [/pompa\s*acqua/i, "pompa_acqua"],
+  [/abitacolo|antipollin/i, "filtro_abitacolo"],
+  [/filtro\s*aria|aria\s*motore/i, "filtro_aria"],
+  [/filtro.*carburante|filtro.*gasolio|filtro.*benz|gpl/i, "filtro_carburante"],
+  [/liquido.*fren|olio.*fren/i, "liquido_freni"],
+  [/pastigl/i, "pastiglie"],
+  [/dischi.*fren|disco.*fren|dischi\b/i, "dischi"],
+  [/refriger|raffredd|radiator/i, "raffreddamento"],
+  [/ammortizz|sospension|braccett|sterzo/i, "ammortizzatori"],
+  [/gomm|pneumatic/i, "gomme"],
+  [/batteri/i, "batteria"],
+  [/clima|condizion/i, "clima"],
+  [/revision/i, "revisione"],
+  [/tagliand/i, "tagliando"],
+  [/frizion/i, "frizione"],
+  [/alternat/i, "alternatore"],
+  [/scarico|marmitt|silenziat/i, "scarico"],
+  [/\bfap\b|\bdpf\b|particolat/i, "fap"],
+  [/tergicrist|spazzol/i, "tergicristalli"],
+  [/lavavetr|lavacrist/i, "lavavetri"],
+  [/luci|lampadin|faro|fanale/i, "luci"],
+];
+function partIconFor(t){
+  const s = (t.name || "") + " " + (t.category || "");
+  for (const [re, id] of ICON_RULES){ if (re.test(s) && PART_ICONS.has(id)) return id; }
+  return null;
+}
+const WRENCH = '<div class="wrench">🔧</div>';
+function grpColor(g){ return g==="bad" ? "var(--bad)" : g==="warn" ? "var(--warn)" : "var(--ok)"; }
+function grpLabel(g){ return g==="bad" ? "Scaduto" : g==="warn" ? "In scadenza" : "A posto"; }
+
+function statusGroup(st){ return st === "OVERDUE" ? "bad" : st === "DUE_SOON" ? "warn" : "ok"; }
+// Icona rappresentativa di ogni sistema (categoria). null -> chiave inglese.
+const CAT_ICON = {
+  "Freni": "dischi", "Olio motore": "olio", "Distribuzione": "distribuzione", "Filtri": "filtro_aria",
+  "Accensione": "candele", "Raffreddamento": "pompa_acqua", "Sospensioni / sterzo": "ammortizzatori",
+  "Pneumatici / cerchi": "gomme", "Scarico": "scarico", "Elettrico": "batteria", "Trasmissione": "frizione",
+  "Controlli periodici": "revisione", "Carrozzeria / accessori": "tergicristalli",
+};
+function catIcon(cat){ return CAT_ICON[cat] || null; }
+function iconImg(id){ return id ? '<img src="parti/' + id + '.png" alt="" onerror="this.outerHTML=WRENCH">' : WRENCH; }
+const ORD = { bad: 0, warn: 1, ok: 2 };
+
+const SCHEDA = []; // per veicolo: { counts:{bad,warn,ok}, macros:[{cat,icon,worst,nbad,nwarn,parts:[...]}] }
+
+function buildScheda(v, idx, cur){
+  const counts = { bad: 0, warn: 0, ok: 0 };
+  const byCat = {};
+  (v.tasks || []).filter(t => t.enabled !== false).forEach(t => {
+    const c = compute(t, cur);
+    const g = statusGroup(c.status);
+    counts[g]++;
+    const cat = t.category || "Altro";
+    (byCat[cat] = byCat[cat] || []).push({
+      name: t.name, icon: partIconFor(t), g,
+      detail: c.status === "NEVER" ? "mai eseguita" : (detailText(c) || ""),
+      interval: everyStr(t.km, t.months),
+      prudent: (t.recKm || t.recMonths) ? everyStr(t.recKm, t.recMonths) : "",
+      last: (t.lastKm != null || t.lastDate != null)
+        ? "ultima: " + [t.lastKm != null ? fmtKm(t.lastKm) : null,
+            t.lastDate ? new Date(t.lastDate).toLocaleDateString("it-IT") : null].filter(Boolean).join(" · ")
+        : "mai eseguita",
+      notes: t.notes || "",
+    });
+  });
+  const macros = Object.keys(byCat).map(cat => {
+    const parts = byCat[cat].sort((a, b) => ORD[a.g] - ORD[b.g]);
+    const nbad = parts.filter(p => p.g === "bad").length;
+    const nwarn = parts.filter(p => p.g === "warn").length;
+    const worst = nbad ? "bad" : nwarn ? "warn" : "ok";
+    return { cat, icon: catIcon(cat), parts, worst, nbad, nwarn };
+  }).sort((a, b) => ORD[a.worst] - ORD[b.worst] || a.cat.localeCompare(b.cat));
+  SCHEDA[idx] = { counts, macros };
+
+  let h = '<div class="scheda"><div class="statusline">' +
+    '<span style="color:var(--bad)">● ' + counts.bad + ' scadut' + (counts.bad === 1 ? 'o' : 'e') + '</span>' +
+    '<span style="color:var(--warn)">● ' + counts.warn + ' in scadenza</span>' +
+    '<span style="color:var(--ok)">● ' + counts.ok + ' a posto</span></div><div class="mgrid">';
+  macros.forEach((m, mi) => {
+    const badge = m.nbad ? '<span class="mbadge" style="background:var(--bad)">' + m.nbad + '</span>'
+      : m.nwarn ? '<span class="mbadge" style="background:var(--warn)">' + m.nwarn + '</span>' : '';
+    h += '<div class="mcard" onclick="openSystem(' + idx + ',' + mi + ')">' +
+      '<div class="pic">' + iconImg(m.icon) +
+      '<span class="pdot" style="background:' + grpColor(m.worst) + '"></span>' + badge + '</div>' +
+      '<div class="mlab">' + esc(m.cat) + '</div>' +
+      '<div class="msub">' + m.parts.length + ' voc' + (m.parts.length === 1 ? 'e' : 'i') + '</div></div>';
+  });
+  return h + '</div></div>';
+}
+
+function openSystem(idx, mi){
+  const m = SCHEDA[idx] && SCHEDA[idx].macros[mi];
+  if (!m) return;
+  const sheet = document.getElementById("partsheet");
+  const rows = m.parts.map(p => {
+    const info = [p.interval ? "Casa madre: " + p.interval : null,
+      p.prudent ? "Consigliato: " + p.prudent : null, p.last,
+      p.detail ? "Stato: " + p.detail : null, p.notes || null]
+      .filter(Boolean).map(esc).join(" · ");
+    return '<div class="prow"><div class="pic sm">' + iconImg(p.icon) + '</div>' +
+      '<div class="pbody"><div class="pname">' + esc(p.name) +
+      ' <span class="ph-pill" style="border:1px solid ' + grpColor(p.g) + ';color:' + grpColor(p.g) +
+      '">' + grpLabel(p.g) + '</span></div><div class="prow-info">' + info + '</div></div></div>';
+  }).join("");
+  sheet.querySelector(".sheet").innerHTML =
+    '<div class="ph-top"><div class="ph-img sm">' + iconImg(m.icon) + '</div>' +
+    '<div class="ph-title">' + esc(m.cat) + '</div>' +
+    '<button class="ph-x" onclick="closePart()">✕</button></div>' +
+    '<div class="prows">' + rows + '</div>';
+  sheet.classList.add("open");
+}
+function closePart(){ document.getElementById("partsheet").classList.remove("open"); }
 // Controlli "verificato, ancora buono" del ciclo corrente (dall'ultimo intervento in poi).
 function currentChecks(t) {
   const arr = Array.isArray(t.checks) ? t.checks : [];
@@ -139,9 +326,14 @@ function interventionsHtml(t) {
       const sub = [x.model || null,
                    x.partCode ? "cod. " + x.partCode : null,
                    x.supplier || null,
-                   x.priceEuro != null ? fmtEuro(x.priceEuro) : null].filter(Boolean).map(esc).join(" · ");
+                   x.priceEuro != null ? fmtEuro(x.priceEuro) : null,
+                   x.receiptNumber ? "scontrino " + x.receiptNumber : null].filter(Boolean).map(esc).join(" · ");
       const note = (x.notes && String(x.notes).trim()) ? '<br>' + esc(x.notes) : '';
-      return '<div class="check">🔧 ' + head + (sub ? '<br><small>' + sub + '</small>' : '') + note + '</div>';
+      const photo = x.photo
+        ? '<div class="rcpt-wrap"><img class="rcpt" loading="lazy" alt="Scontrino" ' +
+          'src="data:image/jpeg;base64,' + x.photo + '" onclick="zoomImg(this.src)"></div>'
+        : '';
+      return '<div class="check">🔧 ' + head + (sub ? '<br><small>' + sub + '</small>' : '') + note + photo + '</div>';
     }).join("");
 }
 
@@ -163,7 +355,7 @@ const MOCK_DATA = {
     vid: "v1a2b3c4", name: "Lancia Y", plate: "AB123CD", brand: "Lancia", model: "Ypsilon", year: 2013, odometerKm: 98000,
     tasks: [
       { name:"Cambio olio motore", category:"Olio motore", km:30000, months:24, recKm:15000, recMonths:12, lastKm:90000, lastDate: Date.now()-200*DAY, notes:"Con filtro olio. Urbano: ogni 12 mesi.", enabled:true,
-        interventions:[ { syncId:"iv1", brand:"Selenia", model:"20K 10W-40", partCode:"OL-20K", supplier:"Ricambi Rossi", priceEuro:48.5, installedAtKm:90000, installedAtDate: Date.now()-200*DAY, updatedAt: Date.now()-200*DAY } ] },
+        interventions:[ { syncId:"iv1", brand:"Selenia", model:"20K 10W-40", partCode:"OL-20K", supplier:"Ricambi Rossi", priceEuro:48.5, receiptNumber:"1423", photo:"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909M1raRby21gEnULI8kkpXOdu92fb+G7H4VcooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAiu/+POf/AK5t/Kpaiu/+POf/AK5t/KpaACorT/jzg/65r/KpaitP+POD/rmv8qAJaKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAiu/+POf/AK5t/Kpaiu/+POf/AK5t/KpaACorT/jzg/65r/KpaitP+POD/rmv8qAJaKrX94LOKNiEPmOEBd9iqcE5JwcdMfUiq66hcSCQxWW7yceaPM5zjOF4+bgg9uooA0aKz5NRkVJp1tw1pCxV5PMw3ynDELjkA57joaji1gOJt0G14rlYQu/7ymXy9/T1B49vegDUorMudSurdrzdaQlbWDzyROcsDvwMbOvyfrT11GRb6O0nt0WR3C5STcoBR2B6Dn92Rj3BoA0KKyLfXY5LC3upoTF5jESLuz5Y8tpAenOVA/P2q3FeT+dCl1bLCJ8iMiTccgZwwwMHAPTPQ0AXKKy4tYDibdBteK5WELv+8pl8vf09QePb3q1qV29jYy3McBmMaliu4LwASST+HvQBaoqnf362bQIIzI8siJgHG1SwXcfoWH5037dP9oaH7IdxRniG/lgrBfm4+XOQR14z9KAL1FVdPvPtsUj7UGyQplH3q2AOQcDPXHTqDVqgAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAIrv8A485/+ubfyqWorv8A485/+ubfyqWgAqK0/wCPOD/rmv8AKpaitP8Ajzg/65r/ACoAS6illRRDKIyDkhk3KwxjBGR/PtVG20mS0jkitrsRxzHdIBHyCepQ5+XjAHXGBWpRQBnyadIyzQLcBbSZizx+XlvmOWAbPAJz27mo5dHDrDtn2vFctMW2feUy+Zs6+oHPt71qUUAUrvT/ALT9t/e7ftVsLf7uduN/PXn7/T2pi6VFFeRzW5SKJJBJ5SJgFtjoTx6hh2/h9+NCigDIOhRlbJGmJSCHyZV2484CNkB68Y3N69atxWc/nQvdXKzCDJjAj2nJGMscnJwT0x1NXKKAMuXRw6w7Z9rxXLTFtn3lMvmbOvqBz7e9XLu3a606a1eQBpomjLheASMZxn9M1YooAo32lw3j+YWkSTdGSyyMMhHDYwCB689s5pqWN0r3DtdoZJiCHWIhlwcqPvcqOmOM5PrWhRQBXs7drcSmSQPJNJ5jFV2jOAOBk44A79c1YoooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigCK7/485/+ubfyqWorv/jzn/65t/KpaACorT/jzg/65r/KparQPLHbxxtbS5VQDgr2H1oAs0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAF3/x5z/9c2/lUtVp3lkt5I1tpcspAyV7j61ZoAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z", installedAtKm:90000, installedAtDate: Date.now()-200*DAY, updatedAt: Date.now()-200*DAY } ] },
       { name:"Candele", category:"Accensione", km:30000, lastKm:70000, lastDate: Date.now()-900*DAY, enabled:true,
         checks:[ { km:95000, date: Date.now()-40*DAY, note:"ancora buone, sostituire al prossimo tagliando" } ] },
       { name:"Cinghia distribuzione", category:"Distribuzione", km:120000, months:60, lastKm:20000, lastDate: Date.now()-1500*DAY, enabled:true },
@@ -208,8 +400,11 @@ function renderVehicle(v, idx) {
           '<button id="saveKm' + idx + '">Aggiorna km</button></div>';
   html += '</div>';
 
-  // scadenze (overdue/due/upcoming) ordinate
+  // --- Scheda a categorie (parti): Scaduto / In scadenza / A posto ---
   const cur = v.odometerKm;
+  html += buildScheda(v, idx, cur);
+
+  // scadenze (overdue/due/upcoming) ordinate
   function soon(x){ const d = x.c.dayRem ?? 1e9, k = x.c.kmRem != null ? x.c.kmRem/30 : 1e9; return Math.min(d,k); }
   const items = (v.tasks || []).filter(t => t.enabled !== false).map(t => {
     const c = compute(t, cur);
@@ -226,7 +421,7 @@ function renderVehicle(v, idx) {
     for (const x of items) {
       html += '<div class="item"><div class="dot" style="background:' + dotColor(x.st) + '"></div>' +
         '<div class="body"><div class="name">' + esc(x.t.name) + '</div>' +
-        '<div class="detail">' + esc(detailText(x.c)) + '</div>' + checksHtml(x.t) + '</div></div>';
+        '<div class="detail">' + esc(detailText(x.c)) + '</div>' + reminderHtml(x.t) + checksHtml(x.t) + '</div></div>';
     }
     html += '</div>';
   }
@@ -243,7 +438,7 @@ function renderVehicle(v, idx) {
       (prudent ? '<span class="pill">consigliato</span>' : '') + '</div>' +
       '<div class="detail">' + (interval ? esc("Casa madre: " + interval) + ' · ' : '') +
       (prudent ? esc("consigliato: " + prudent) + ' · ' : '') + esc(last) + '</div>' +
-      interventionsHtml(t) + checksHtml(t) + '</div></div>';
+      reminderHtml(t) + interventionsHtml(t) + checksHtml(t) + '</div></div>';
   }
   html += '</div>';
   return html;
@@ -387,5 +582,7 @@ async function registerSW() {
 registerSW();
 init();
 </script>
+<div id="lightbox" onclick="this.classList.remove('open')"><img alt="Scontrino"></div>
+<div id="partsheet" onclick="if(event.target===this)closePart()"><div class="sheet"></div></div>
 </body>
 </html>
