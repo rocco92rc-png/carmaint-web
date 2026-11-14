@@ -374,7 +374,7 @@ function renderEditor(){
         '</div>';
       h += '<label>Note</label><textarea data-vi="'+vi+'" data-ti="'+ti+'" data-tk="notes">'+esc(t.notes)+'</textarea>';
       h += '<div class="chk"><input type="checkbox" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="enabled" '+(t.enabled?'checked':'')+' /><span>Attivo (mostrato al cliente)</span></div>';
-      h += '<div class="chk"><input type="checkbox" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="kmOnly" '+(t.kmOnly?'checked':'')+' /><span>Conta solo i km (ignora la scadenza a tempo)</span></div>';
+      h += '<div class="chk"><input type="checkbox" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="kmOnly" '+(t.kmOnly?'':'checked')+' /><span>Conta anche la data (togli la spunta se valgono solo i km, es. candele)</span></div>';
 
       // interventions
       if (t.interventions.length) h += '<div class="section-title" style="font-size:.9rem">Interventi registrati</div>';
@@ -493,7 +493,7 @@ function bindEditor(){
     el.addEventListener(ev, () => {
       const vi=+el.dataset.vi, ti=+el.dataset.ti, k=el.dataset.tk, t=M.vehicles[vi].tasks[ti];
       if (k==="enabled") t.enabled = el.checked;
-      else if (k==="kmOnly") t.kmOnly = el.checked;
+      else if (k==="kmOnly") t.kmOnly = !el.checked;
       else if (k==="lastDate") t.lastDate = inputToMs(el.value);
       else t[k]=el.value;
       dirty.task.add(t.syncId); refreshBar();
