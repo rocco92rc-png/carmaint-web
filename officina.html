@@ -39,6 +39,10 @@
     padding:10px 14px; font-size:.95rem; font-weight:600; cursor:pointer; }
   button:disabled { opacity:.5; cursor:default; }
   button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); }
+  .kminfo { margin-top: 8px; font-size: .84rem; color: var(--muted); }
+  .kminfo.stale, .kmstale { color: #3a2e00; background: #ffe08a; border-radius: 6px; font-weight: 700; }
+  .kminfo.stale { padding: 6px 9px; }
+  .kmstale { padding: 0 5px; }
   button.danger { background:transparent; border:1px solid var(--bad); color:var(--bad); padding:7px 11px; font-size:.85rem; }
   button.small { padding:8px 12px; font-size:.88rem; }
   .clientrow { display:flex; align-items:center; gap:12px; padding:14px 2px; border-top:1px solid var(--line); cursor:pointer; }
@@ -81,6 +85,16 @@ const CATEGORIES = ["Olio motore","Filtri","Accensione","Distribuzione","Freni",
   "Elettrico","Carrozzeria / accessori","Controlli periodici","Altro (extra utente)"];
 
 // ---- helpers ----
+// ---- Ultimo inserimento km: quando e da dove (app / web / officina) ----
+const KM_STALE_DAYS = 14;
+const KM_SRC = { app: "app", web: "web", officina: "officina" };
+function kmAge(at){ return at ? Math.max(0, Math.floor((Date.now() - at) / 86400000)) : null; }
+function kmStale(at){ return !!at && (Date.now() - at) > KM_STALE_DAYS * 86400000; }
+function kmInfoText(at, src){
+  if (!at) return "";
+  const d = new Date(at).toLocaleDateString("it-IT", { day:"numeric", month:"short", year:"numeric" });
+  return "Km aggiornati il " + d + (KM_SRC[src] ? " · da " + KM_SRC[src] : "");
+}
 function esc(s){ return String(s ?? "").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function genVid(){ return "v" + Math.random().toString(16).slice(2,10); }
 function genId(){ return (crypto.randomUUID ? crypto.randomUUID() : "id"+Math.random().toString(16).slice(2)); }
@@ -147,7 +161,10 @@ function showList(clients){
     h += '<div class="clientrow" data-slug="'+esc(c.slug)+'">'+
          '<div><div class="cname">'+esc(c.client)+'</div>'+
          '<div class="cmeta">'+c.cars+' '+(c.cars===1?'auto':'auto')+' · agg. '+
-         (c.updatedAt?new Date(c.updatedAt).toLocaleDateString("it-IT"):"—")+'</div></div>'+
+         (c.updatedAt?new Date(c.updatedAt).toLocaleDateString("it-IT"):"—")+
+         (c.kmAt ? ' · <span class="'+(kmStale(c.kmAt)?'kmstale':'')+'">km agg. '+
+           new Date(c.kmAt).toLocaleDateString("it-IT")+(kmStale(c.kmAt)?' ⚠':'')+'</span>' : '')+
+         '</div></div>'+
          '<div class="spacer"></div><div class="muted">›</div></div>';
   });
   h += '</div><div class="row"><button class="ghost small" id="logoutBtn">Esci</button></div>';
@@ -195,6 +212,7 @@ function editClient(profile, created){
       vid: v.vid || genVid(),
       name: v.name||"", plate:v.plate||"", brand:v.brand||"", model:v.model||"",
       variant:v.variant||"", year:v.year??"", odometerKm:v.odometerKm??"",
+      odoAt: v.odoAt || null, odoSrc: v.odoSrc || null,
       tasks: (v.tasks||[]).filter(t=>!t.deleted).map(t => ({
         syncId: t.syncId || genId(),
         name:t.name||"", category:t.category||"", km:t.km??"", months:t.months??"",
@@ -239,7 +257,7 @@ function renderEditor(){
       field(v,vi,null,null,"model","Modello","text")+
       field(v,vi,null,null,"year","Anno","number")+
       field(v,vi,null,null,"odometerKm","Km attuali","number")+
-      '</div>';
+      '</div>' + kmInfoHtml(v);
 
     h += '<div class="section-title">Tagliandi / manutenzioni</div>';
     v.tasks.forEach((t,ti) => {
@@ -329,6 +347,12 @@ function renderEditor(){
   bindEditor();
 }
 
+function kmInfoHtml(v){
+  if (!v.odoAt) return '<div class="kminfo">Km: data di inserimento non ancora registrata</div>';
+  const stale = kmStale(v.odoAt);
+  return '<div class="kminfo' + (stale ? ' stale' : '') + '">' + esc(kmInfoText(v.odoAt, v.odoSrc)) +
+    (stale ? ' · ⚠ non aggiornati da ' + kmAge(v.odoAt) + ' giorni' : '') + '</div>';
+}
 function field(v,vi,_a,_b,k,label,type){
   return '<div><label>'+esc(label)+'</label><input type="'+type+'" data-vi="'+vi+'" data-vk="'+k+'" value="'+esc(v[k])+'" /></div>';
 }

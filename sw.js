@@ -1,6 +1,6 @@
 // Minimal service worker: caches the app shell so it opens offline. The client
 // data (/api/*) is always fetched fresh from the network, never cached.
-const CACHE = "carmaint-web-v1";
+const CACHE = "carmaint-web-v5";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest",
   "./icon-180.png", "./icon-192.png", "./icon-512.png"];
 

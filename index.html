@@ -64,6 +64,12 @@
     :root { --bg:#f3f4f6; --card:#fff; --card2:#f0f2f5; --text:#1a1c20; --muted:#5f6670;
             --line:#e3e6ea; --primary-ct:#e4edff; --check:#2f7d6a; }
   }
+  .kmbox { margin-top: 10px; border-radius: 12px; }
+  .kmbox .kmrow { margin-top: 0; }
+  .kmbox.stale { background: #ffe08a; color: #3a2e00; padding: 10px; }
+  .kmwhen { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+  .kmbox.stale .kmwhen { color: #3a2e00; }
+  .kmwarn { font-size: .84rem; font-weight: 700; margin-top: 4px; }
   .rcpt-wrap { margin-top: 7px; }
   .rcpt { width: 128px; height: 92px; object-fit: cover; border-radius: 9px;
     border: 1px solid var(--line); cursor: zoom-in; background:#0a0c10; display:block; }
@@ -166,6 +172,16 @@ function everyStr(km, months) {
     ? "ogni " + (months/12) + (months/12 === 1 ? " anno" : " anni")
     : "ogni " + months + " mesi");
   return parts.join(" / ");
+}
+// ---- Ultimo inserimento km: quando e da dove (app / web / officina) ----
+const KM_STALE_DAYS = 14;
+const KM_SRC = { app: "app", web: "web", officina: "officina" };
+function kmAge(at){ return at ? Math.max(0, Math.floor((Date.now() - at) / 86400000)) : null; }
+function kmStale(at){ return !!at && (Date.now() - at) > KM_STALE_DAYS * 86400000; }
+function kmInfoText(at, src){
+  if (!at) return "";
+  const d = new Date(at).toLocaleDateString("it-IT", { day:"numeric", month:"short", year:"numeric" });
+  return "Km aggiornati il " + d + (KM_SRC[src] ? " · da " + KM_SRC[src] : "");
 }
 function esc(s){ return String(s ?? "").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 function zoomImg(src){ var lb=document.getElementById('lightbox'); lb.querySelector('img').src=src; lb.classList.add('open'); }
@@ -352,7 +368,7 @@ const VAPID_PUBLIC = "BK4sbadHftpoUuxB-dpEb8MvfUhe8Tg2xHqV84SR13BcH8C31UISgAVQ0R
 const MOCK_DATA = {
   client: "Simone Dallara", slug: "simone-dallara", updatedAt: Date.now(),
   vehicles: [{
-    vid: "v1a2b3c4", name: "Lancia Y", plate: "AB123CD", brand: "Lancia", model: "Ypsilon", year: 2013, odometerKm: 98000,
+    vid: "v1a2b3c4", name: "Lancia Y", plate: "AB123CD", brand: "Lancia", model: "Ypsilon", year: 2013, odometerKm: 98000, odoAt: Date.now()-20*DAY, odoSrc: "app",
     tasks: [
       { name:"Cambio olio motore", category:"Olio motore", km:30000, months:24, recKm:15000, recMonths:12, lastKm:90000, lastDate: Date.now()-200*DAY, notes:"Con filtro olio. Urbano: ogni 12 mesi.", enabled:true,
         interventions:[ { syncId:"iv1", brand:"Selenia", model:"20K 10W-40", partCode:"OL-20K", supplier:"Ricambi Rossi", priceEuro:48.5, receiptNumber:"1423", photo:"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909M1raRby21gEnULI8kkpXOdu92fb+G7H4VcooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAiu/+POf/AK5t/Kpaiu/+POf/AK5t/KpaACorT/jzg/65r/KpaitP+POD/rmv8qAJaKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAiu/+POf/AK5t/Kpaiu/+POf/AK5t/KpaACorT/jzg/65r/KpaitP+POD/rmv8qAJaKrX94LOKNiEPmOEBd9iqcE5JwcdMfUiq66hcSCQxWW7yceaPM5zjOF4+bgg9uooA0aKz5NRkVJp1tw1pCxV5PMw3ynDELjkA57joaji1gOJt0G14rlYQu/7ymXy9/T1B49vegDUorMudSurdrzdaQlbWDzyROcsDvwMbOvyfrT11GRb6O0nt0WR3C5STcoBR2B6Dn92Rj3BoA0KKyLfXY5LC3upoTF5jESLuz5Y8tpAenOVA/P2q3FeT+dCl1bLCJ8iMiTccgZwwwMHAPTPQ0AXKKy4tYDibdBteK5WELv+8pl8vf09QePb3q1qV29jYy3McBmMaliu4LwASST+HvQBaoqnf362bQIIzI8siJgHG1SwXcfoWH5037dP9oaH7IdxRniG/lgrBfm4+XOQR14z9KAL1FVdPvPtsUj7UGyQplH3q2AOQcDPXHTqDVqgAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKAIrv8A485/+ubfyqWorv8A485/+ubfyqWgAqK0/wCPOD/rmv8AKpaitP8Ajzg/65r/ACoAS6illRRDKIyDkhk3KwxjBGR/PtVG20mS0jkitrsRxzHdIBHyCepQ5+XjAHXGBWpRQBnyadIyzQLcBbSZizx+XlvmOWAbPAJz27mo5dHDrDtn2vFctMW2feUy+Zs6+oHPt71qUUAUrvT/ALT9t/e7ftVsLf7uduN/PXn7/T2pi6VFFeRzW5SKJJBJ5SJgFtjoTx6hh2/h9+NCigDIOhRlbJGmJSCHyZV2484CNkB68Y3N69atxWc/nQvdXKzCDJjAj2nJGMscnJwT0x1NXKKAMuXRw6w7Z9rxXLTFtn3lMvmbOvqBz7e9XLu3a606a1eQBpomjLheASMZxn9M1YooAo32lw3j+YWkSTdGSyyMMhHDYwCB689s5pqWN0r3DtdoZJiCHWIhlwcqPvcqOmOM5PrWhRQBXs7drcSmSQPJNJ5jFV2jOAOBk44A79c1YoooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigCK7/485/+ubfyqWorv/jzn/65t/KpaACorT/jzg/65r/KparQPLHbxxtbS5VQDgr2H1oAs0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAS0VF50n/AD7S/mv/AMVR50n/AD7S/mv/AMVQBLRUXnSf8+0v5r/8VR50n/PtL+a//FUAF3/x5z/9c2/lUtVp3lkt5I1tpcspAyV7j61ZoAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z", installedAtKm:90000, installedAtDate: Date.now()-200*DAY, updatedAt: Date.now()-200*DAY } ] },
@@ -362,7 +378,7 @@ const MOCK_DATA = {
       { name:"Filtro abitacolo (antipolline)", category:"Filtri", km:30000, months:12, lastKm:90000, lastDate: Date.now()-30*DAY, enabled:true }
     ]
   }, {
-    vid: "v9z8y7x6", name: "Fiat Panda", plate: "GH456KL", brand: "Fiat", model: "Panda", year: 2019, odometerKm: 42000,
+    vid: "v9z8y7x6", name: "Fiat Panda", plate: "GH456KL", brand: "Fiat", model: "Panda", year: 2019, odometerKm: 42000, odoAt: Date.now()-3*DAY, odoSrc: "web",
     tasks: [
       { name:"Cambio olio motore", category:"Olio motore", km:15000, months:12, lastKm:40000, lastDate: Date.now()-100*DAY, enabled:true },
       { name:"Pastiglie freni anteriori", category:"Freni", km:40000, lastKm:10000, lastDate: Date.now()-600*DAY, enabled:true,
@@ -395,10 +411,15 @@ function renderVehicle(v, idx) {
   html += '<div class="veh-name">' + esc(v.name) + '</div>';
   html += '<div class="veh-meta">' + esc([v.brand, v.model, v.year].filter(Boolean).join(" ")) +
           (v.plate ? " · " + esc(v.plate) : "") + '</div>';
+  const stale = kmStale(v.odoAt);
+  html += '<div class="kmbox' + (stale ? ' stale' : '') + '">';
   html += '<div class="kmrow"><input id="km' + idx + '" type="number" inputmode="numeric" value="' +
           (v.odometerKm ?? "") + '" placeholder="km attuali" />' +
           '<button id="saveKm' + idx + '">Aggiorna km</button></div>';
-  html += '</div>';
+  if (v.odoAt) html += '<div class="kmwhen">' + esc(kmInfoText(v.odoAt, v.odoSrc)) + '</div>';
+  if (stale) html += '<div class="kmwarn">⚠ Non aggiorni i km da ' + kmAge(v.odoAt) +
+          ' giorni: inseriscili per avere scadenze giuste.</div>';
+  html += '</div></div>';
 
   // --- Scheda a categorie (parti): Scaduto / In scadenza / A posto ---
   const cur = v.odometerKm;
@@ -475,6 +496,8 @@ async function onSaveKm(idx) {
   try {
     await saveKm(km, v.vid);
     v.odometerKm = km;
+    v.odoAt = Date.now();
+    v.odoSrc = "web";
     DATA.updatedAt = Date.now();
     toast("Km aggiornati ✓");
     render();
