@@ -155,6 +155,7 @@ function exportPlan(vi){
       if (num(t.recKm) != null) o.recommendedKm = num(t.recKm);
       if (num(t.recMonths) != null) o.recommendedMonths = num(t.recMonths);
       if (String(t.notes || "").trim()) o.notes = t.notes.trim();
+      if (t.kmOnly) o.kmOnly = true;
       return o;
     }) };
   if (v.variant) plan.variants = [v.variant];
@@ -192,7 +193,7 @@ function mergePlan(vi, plan){
       if (ch) { dirty.task.add(t.syncId); n++; }
     } else {
       const nt = { syncId:genId(), name, category:cat, km:p.km ?? "", months:p.months ?? "",
-        recKm, recMonths, lastKm:"", lastDate:null, notes, enabled:true, interventions:[], checks:[], _new:true };
+        recKm, recMonths, lastKm:"", lastDate:null, notes, enabled:true, kmOnly: !!p.kmOnly, interventions:[], checks:[], _new:true };
       v.tasks.push(nt); byName.set(key(name), nt); dirty.task.add(nt.syncId); n++;
     }
   });
@@ -312,7 +313,7 @@ function editClient(profile, created){
         syncId: t.syncId || genId(),
         name:t.name||"", category:t.category||"", km:t.km??"", months:t.months??"",
         recKm:t.recKm??"", recMonths:t.recMonths??"", lastKm:t.lastKm??"",
-        lastDate: t.lastDate||null, notes:t.notes||"", enabled: t.enabled!==false,
+        lastDate: t.lastDate||null, notes:t.notes||"", enabled: t.enabled!==false, kmOnly: !!t.kmOnly,
         checks: (t.checks||[]).map(c => ({ km:c.km??"", date:c.date||null, note:c.note||"", _new:false })),
         interventions: (t.interventions||[]).filter(i=>!i.deleted).map(i => ({
           syncId:i.syncId||genId(), brand:i.brand||"", model:i.model||"", partCode:i.partCode||"",
@@ -373,6 +374,7 @@ function renderEditor(){
         '</div>';
       h += '<label>Note</label><textarea data-vi="'+vi+'" data-ti="'+ti+'" data-tk="notes">'+esc(t.notes)+'</textarea>';
       h += '<div class="chk"><input type="checkbox" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="enabled" '+(t.enabled?'checked':'')+' /><span>Attivo (mostrato al cliente)</span></div>';
+      h += '<div class="chk"><input type="checkbox" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="kmOnly" '+(t.kmOnly?'checked':'')+' /><span>Conta solo i km (ignora la scadenza a tempo)</span></div>';
 
       // interventions
       if (t.interventions.length) h += '<div class="section-title" style="font-size:.9rem">Interventi registrati</div>';
@@ -491,6 +493,7 @@ function bindEditor(){
     el.addEventListener(ev, () => {
       const vi=+el.dataset.vi, ti=+el.dataset.ti, k=el.dataset.tk, t=M.vehicles[vi].tasks[ti];
       if (k==="enabled") t.enabled = el.checked;
+      else if (k==="kmOnly") t.kmOnly = el.checked;
       else if (k==="lastDate") t.lastDate = inputToMs(el.value);
       else t[k]=el.value;
       dirty.task.add(t.syncId); refreshBar();
@@ -588,7 +591,7 @@ function buildOps(){
         ops.push({ t:"task.upsert", vid:v.vid, vname:v.name, syncId:t.syncId, tname:t.name, fields:{
           name:t.name, category:t.category, km:num(t.km), months:num(t.months),
           recKm:num(t.recKm), recMonths:num(t.recMonths), lastKm:num(t.lastKm),
-          lastDate:t.lastDate, notes:t.notes, enabled:t.enabled } });
+          lastDate:t.lastDate, notes:t.notes, enabled:t.enabled, kmOnly:!!t.kmOnly } });
       }
       t.interventions.forEach(iv => {
         if (dirty.iv.has(iv.syncId)) {

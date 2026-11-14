@@ -130,7 +130,8 @@
 // ---- countdown: stessa logica dell'app (prudente = recKm/recMonths se presenti) ----
 const WARN_KM = 1000, WARN_DAYS = 30, HORIZON_KM = 3000, HORIZON_DAYS = 90, DAY = 86400000;
 function compute(t, curKm) {
-  const ik = (t.recKm ?? t.km), im = (t.recMonths ?? t.months);
+  // kmOnly: i mesi restano registrati ma non generano scadenza a data.
+  const ik = (t.recKm ?? t.km), im = t.kmOnly ? null : (t.recMonths ?? t.months);
   if (t.lastKm == null && t.lastDate == null) return { status: "NEVER" };
   let kmRem = null, dayRem = null;
   if (ik != null && t.lastKm != null && curKm != null) kmRem = (t.lastKm + ik) - curKm;
@@ -256,7 +257,7 @@ function buildScheda(v, idx, cur){
     (byCat[cat] = byCat[cat] || []).push({
       name: t.name, icon: partIconFor(t), g,
       detail: c.status === "NEVER" ? "mai eseguita" : (detailText(c) || ""),
-      interval: everyStr(t.km, t.months),
+      interval: everyStr(t.km, t.kmOnly ? null : t.months) + (t.kmOnly ? " (solo km)" : ""),
       prudent: (t.recKm || t.recMonths) ? everyStr(t.recKm, t.recMonths) : "",
       last: (t.lastKm != null || t.lastDate != null)
         ? "ultima: " + [t.lastKm != null ? fmtKm(t.lastKm) : null,
@@ -450,7 +451,7 @@ function renderVehicle(v, idx) {
   // storico (tutte le voci con ultima esecuzione)
   html += '<div class="section-title">Tutti gli interventi</div><div class="card">';
   for (const t of (v.tasks || [])) {
-    const interval = everyStr(t.km, t.months);
+    const interval = everyStr(t.km, t.kmOnly ? null : t.months) + (t.kmOnly ? " (solo km)" : "");
     const prudent = (t.recKm || t.recMonths) ? everyStr(t.recKm, t.recMonths) : null;
     const last = (t.lastKm != null || t.lastDate != null)
       ? "ultima: " + [t.lastKm != null ? fmtKm(t.lastKm) : null, t.lastDate ? new Date(t.lastDate).toLocaleDateString("it-IT") : null].filter(Boolean).join(" · ")
