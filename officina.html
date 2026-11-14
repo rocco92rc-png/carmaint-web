@@ -142,6 +142,30 @@ async function openPlanPicker(vi){
     ov.querySelector("[data-list]").textContent = "Impossibile caricare il catalogo (" + e.message + ").";
   }
 }
+// Esporta le voci dell'auto (senza storico) nel formato carmaint-piani, da caricare in piani/.
+function exportPlan(vi){
+  const v = M.vehicles[vi];
+  const num = (x) => (x === "" || x == null || isNaN(Number(x))) ? undefined : Number(x);
+  const model = [v.brand, v.model].filter(Boolean).join(" ") || v.name || "Auto";
+  const plan = { model, source: "Esportato da CarMaint (" + (v.name || model) + ")",
+    tasks: v.tasks.filter(t => t.enabled !== false && String(t.name || "").trim()).map(t => {
+      const o = { name: t.name.trim(), category: t.category || CATEGORIES[CATEGORIES.length - 1] };
+      if (num(t.km) != null) o.km = num(t.km);
+      if (num(t.months) != null) o.months = num(t.months);
+      if (num(t.recKm) != null) o.recommendedKm = num(t.recKm);
+      if (num(t.recMonths) != null) o.recommendedMonths = num(t.recMonths);
+      if (String(t.notes || "").trim()) o.notes = t.notes.trim();
+      return o;
+    }) };
+  if (v.variant) plan.variants = [v.variant];
+  const fname = ([v.brand, v.model, v.variant].filter(Boolean).join("_") || v.name || "piano")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") + ".json";
+  const blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = fname; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  toast("Piano esportato: " + fname + " — caricalo in carmaint-piani/piani");
+}
 function mergePlan(vi, plan){
   const v = M.vehicles[vi];
   const key = (s) => String(s || "").trim().toLowerCase();
@@ -399,7 +423,8 @@ function renderEditor(){
       h += '</div>'; // task-card
     });
     h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-task="'+vi+'">+ Aggiungi tagliando</button>'+
-         '<button class="ghost small" data-import-plan="'+vi+'">📋 Importa piano</button></div>';
+         '<button class="ghost small" data-import-plan="'+vi+'">📋 Importa piano</button>'+
+         '<button class="ghost small" data-export-plan="'+vi+'">⬇ Esporta come piano</button></div>';
     h += '</div>'; // veh-card
   });
 
@@ -508,6 +533,7 @@ function bindEditor(){
     dirty.task.add(M.vehicles[vi].tasks[M.vehicles[vi].tasks.length-1].syncId); renderEditor();
   });
   document.querySelectorAll('[data-import-plan]').forEach(el => el.onclick = () => openPlanPicker(+el.dataset.importPlan));
+  document.querySelectorAll('[data-export-plan]').forEach(el => el.onclick = () => exportPlan(+el.dataset.exportPlan));
   document.querySelectorAll('[data-add-iv]').forEach(el => el.onclick = () => {
     const [vi,ti]=el.dataset.addIv.split("_").map(Number); const t=M.vehicles[vi].tasks[ti];
     t.interventions.push({ syncId:genId(), brand:"", model:"", partCode:"", supplier:"", priceEuro:"",
