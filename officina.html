@@ -104,6 +104,77 @@ function msToInput(ms){ if(!ms) return ""; const d=new Date(ms); return d.toISOS
 function inputToMs(s){ if(!s) return null; const t=Date.parse(s+"T12:00:00"); return isNaN(t)?null:t; }
 function slugify(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80) || "cliente"; }
 let toastTimer;
+// ========== IMPORTA PIANO (catalogo pubblico carmaint-piani) ==========
+// Unisce un piano a un'auto gia' esistente senza perdere nulla: le voci con lo stesso nome
+// tengono storico/controlli/interventi e ricevono solo cio' che manca (intervalli, note);
+// le voci nuove vengono aggiunte. Poi basta premere Salva.
+const PLAN_REPO = "rocco92rc-png/carmaint-piani";
+async function openPlanPicker(vi){
+  const ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px";
+  ov.innerHTML = '<div class="card" style="max-width:460px;width:100%;max-height:80vh;overflow:auto">'+
+    '<div class="row"><strong>Importa piano di manutenzione</strong><div class="spacer"></div><button class="ghost small" data-x>✕</button></div>'+
+    '<div class="muted" style="margin:6px 0 10px;font-size:.85rem">Le voci gia\' presenti mantengono lo storico; vengono aggiunte quelle mancanti e completati intervalli/note vuoti.</div>'+
+    '<div data-list class="muted">Carico i piani…</div></div>';
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.querySelector("[data-x]").onclick = close;
+  ov.onclick = (e) => { if (e.target === ov) close(); };
+  try {
+    const r = await fetch("https://api.github.com/repos/" + PLAN_REPO + "/contents/piani");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const files = (await r.json()).filter(f => f.type === "file" && f.name.endsWith(".json"));
+    const list = ov.querySelector("[data-list]");
+    if (!files.length) { list.textContent = "Nessun piano nel catalogo."; return; }
+    list.innerHTML = files.map((f, i) => '<button class="ghost" style="display:block;width:100%;text-align:left;margin:4px 0" data-i="'+i+'">'+
+      esc(f.name.replace(/\.json$/, "").replace(/[_-]+/g, " "))+'</button>').join("");
+    list.querySelectorAll("[data-i]").forEach(b => b.onclick = async () => {
+      b.disabled = true; b.textContent = "Importo…";
+      try {
+        const pr = await fetch(files[+b.dataset.i].download_url);
+        if (!pr.ok) throw new Error("HTTP " + pr.status);
+        const n = mergePlan(vi, await pr.json());
+        close(); renderEditor();
+        toast(n ? n + " voci aggiunte/completate — premi Salva" : "Nessuna modifica: il piano era gia' presente");
+      } catch (e) { b.disabled = false; toast("Errore nel piano: " + e.message); }
+    });
+  } catch (e) {
+    ov.querySelector("[data-list]").textContent = "Impossibile caricare il catalogo (" + e.message + ").";
+  }
+}
+function mergePlan(vi, plan){
+  const v = M.vehicles[vi];
+  const key = (s) => String(s || "").trim().toLowerCase();
+  const byName = new Map(v.tasks.map(t => [key(t.name), t]));
+  const empty = (x) => x === "" || x == null;
+  const custom = CATEGORIES[CATEGORIES.length - 1];
+  let n = 0;
+  (plan.tasks || []).forEach(p => {
+    const name = String(p.name || "").trim(); if (!name) return;
+    const cat = CATEGORIES.find(c => c.toLowerCase() === key(p.category)) || custom;
+    const notes = [p.engine, p.notes].map(x => String(x || "").trim()).filter(Boolean).join(" — ");
+    const recKm = p.recommendedKm ?? p.recKm ?? "", recMonths = p.recommendedMonths ?? p.recMonths ?? "";
+    const t = byName.get(key(name));
+    if (t) {
+      let ch = false;
+      if (empty(t.km) && empty(t.months)) {
+        if (p.km != null) { t.km = p.km; ch = true; }
+        if (p.months != null) { t.months = p.months; ch = true; }
+      }
+      if (empty(t.recKm) && recKm !== "") { t.recKm = recKm; ch = true; }
+      if (empty(t.recMonths) && recMonths !== "") { t.recMonths = recMonths; ch = true; }
+      if (!String(t.notes || "").trim() && notes) { t.notes = notes; ch = true; }
+      if ((t.category === custom || !t.category) && cat !== custom) { t.category = cat; ch = true; }
+      if (ch) { dirty.task.add(t.syncId); n++; }
+    } else {
+      const nt = { syncId:genId(), name, category:cat, km:p.km ?? "", months:p.months ?? "",
+        recKm, recMonths, lastKm:"", lastDate:null, notes, enabled:true, interventions:[], checks:[], _new:true };
+      v.tasks.push(nt); byName.set(key(name), nt); dirty.task.add(nt.syncId); n++;
+    }
+  });
+  return n;
+}
+
 function toast(m){ const el=document.getElementById("toast"); el.textContent=m; el.classList.add("show");
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove("show"),2400); }
 
@@ -327,7 +398,8 @@ function renderEditor(){
 
       h += '</div>'; // task-card
     });
-    h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-task="'+vi+'">+ Aggiungi tagliando</button></div>';
+    h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-task="'+vi+'">+ Aggiungi tagliando</button>'+
+         '<button class="ghost small" data-import-plan="'+vi+'">📋 Importa piano</button></div>';
     h += '</div>'; // veh-card
   });
 
@@ -435,6 +507,7 @@ function bindEditor(){
       recKm:"", recMonths:"", lastKm:"", lastDate:null, notes:"", enabled:true, interventions:[], checks:[], _new:true });
     dirty.task.add(M.vehicles[vi].tasks[M.vehicles[vi].tasks.length-1].syncId); renderEditor();
   });
+  document.querySelectorAll('[data-import-plan]').forEach(el => el.onclick = () => openPlanPicker(+el.dataset.importPlan));
   document.querySelectorAll('[data-add-iv]').forEach(el => el.onclick = () => {
     const [vi,ti]=el.dataset.addIv.split("_").map(Number); const t=M.vehicles[vi].tasks[ti];
     t.interventions.push({ syncId:genId(), brand:"", model:"", partCode:"", supplier:"", priceEuro:"",
