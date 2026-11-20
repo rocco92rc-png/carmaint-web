@@ -73,11 +73,19 @@
   .rcpt-wrap { margin-top: 7px; }
   .rcpt { width: 128px; height: 92px; object-fit: cover; border-radius: 9px;
     border: 1px solid var(--line); cursor: zoom-in; background:#0a0c10; display:block; }
-  #lightbox { position: fixed; inset: 0; z-index: 90; display: none; align-items: center;
-    justify-content: center; background: rgba(0,0,0,.86); padding: 18px; cursor: zoom-out; }
+  #lightbox { position: fixed; inset: 0; z-index: 90; display: none; flex-direction: column;
+    background: rgba(0,0,0,.92); }
   #lightbox.open { display: flex; }
-  #lightbox img { max-width: 100%; max-height: 100%; border-radius: 10px;
-    box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+  #lightbox .lb-bar { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 12px;
+    padding-top: max(10px, env(safe-area-inset-top)); }
+  #lightbox .lb-bar button, #lightbox .lb-bar a { background: #2a2f3a; color: #fff; border: 0;
+    border-radius: 10px; padding: 9px 14px; font-size: .95rem; text-decoration: none; cursor: pointer; }
+  #lightbox .lb-img { flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center;
+    touch-action: pan-x pan-y pinch-zoom; }
+  #lightbox .lb-img img { max-width: 100%; max-height: 100%; cursor: zoom-in; }
+  #lightbox .lb-img.full { display: block; }
+  #lightbox .lb-img.full img { max-width: none; max-height: none; width: 250%; cursor: zoom-out; }
+  #lightbox .lb-hint { color: #aab; font-size: .8rem; text-align: center; padding: 6px 0 12px; }
   /* --- Scheda a categorie (parti) --- */
   .scheda { margin: 2px 0 6px; display: flex; flex-direction: column; gap: 12px; }
   .statusline { display: flex; flex-wrap: wrap; gap: 14px; font-size: .82rem; font-weight: 600; }
@@ -185,7 +193,17 @@ function kmInfoText(at, src){
   return "Km aggiornati il " + d + (KM_SRC[src] ? " · da " + KM_SRC[src] : "");
 }
 function esc(s){ return String(s ?? "").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
-function zoomImg(src){ var lb=document.getElementById('lightbox'); lb.querySelector('img').src=src; lb.classList.add('open'); }
+// Scontrino a schermo intero: tocca per ingrandire (o pizzica), "Scarica" lo salva nei Download.
+function zoomImg(src){
+  var lb = document.getElementById('lightbox');
+  lb.querySelector('img').src = src;
+  lb.querySelector('.lb-img').classList.remove('full');
+  var a = lb.querySelector('[data-dl]');
+  a.href = src;
+  a.download = 'scontrino_' + new Date().toISOString().slice(0,10) + '.jpg';
+  lb.classList.add('open');
+}
+function closeLb(){ document.getElementById('lightbox').classList.remove('open'); }
 
 // ---- Scheda a categorie: mappa manutenzione -> icona parte ----
 const PART_ICONS = new Set(["alternatore","ammortizzatori","batteria","candele","candelette",
@@ -606,7 +624,11 @@ async function registerSW() {
 registerSW();
 init();
 </script>
-<div id="lightbox" onclick="this.classList.remove('open')"><img alt="Scontrino"></div>
+<div id="lightbox">
+  <div class="lb-bar"><a data-dl href="#" download>⬇ Scarica</a><button onclick="closeLb()">✕ Chiudi</button></div>
+  <div class="lb-img" onclick="this.classList.toggle('full')"><img alt="Scontrino"></div>
+  <div class="lb-hint">Tocca la foto per ingrandirla · Scarica la salva nei Download del telefono</div>
+</div>
 <div id="partsheet" onclick="if(event.target===this)closePart()"><div class="sheet"></div></div>
 </body>
 </html>
