@@ -344,7 +344,9 @@ function editClient(profile, created){
 }
 
 function catOptions(sel){
-  return CATEGORIES.map(c => '<option'+(c===sel?' selected':'')+'>'+esc(c)+'</option>').join("");
+  // Il valore salvato resta quello dell'app ("Altro (extra utente)"), ma si mostra solo "Altro".
+  return CATEGORIES.map(c => '<option value="'+esc(c)+'"'+(c===sel?' selected':'')+'>'+
+    esc(c === "Altro (extra utente)" ? "Altro" : c)+'</option>').join("");
 }
 
 function renderEditor(){
@@ -368,22 +370,22 @@ function renderEditor(){
       field(v,vi,null,null,"odometerKm","Km attuali","number")+
       '</div>' + kmInfoHtml(v);
 
-    h += '<div class="section-title">Tagliandi / manutenzioni</div>';
+    h += '<div class="section-title">Lavorazioni</div>';
     v.tasks.forEach((t,ti) => {
       h += '<div class="task-card" data-vi="'+vi+'" data-ti="'+ti+'">';
-      h += '<div class="task-head"><span class="tname">'+esc(t.name||"(nuovo tagliando)")+'</span>'+
+      h += '<div class="task-head"><span class="tname">'+esc(t.name||"(nuova lavorazione)")+'</span>'+
            (!t.enabled?'<span class="pill warnpill">disattivo</span>':'')+
            '<button class="danger" data-del-task="'+vi+'_'+ti+'">Elimina</button></div>';
       h += '<div class="grid">'+
-        tfield(vi,ti,"name","Nome","text")+
+        tfield(vi,ti,"name","Nome lavorazione","text")+
         '<div><label>Categoria</label><select data-vi="'+vi+'" data-ti="'+ti+'" data-tk="category">'+
           catOptions(t.category)+'</select></div>'+
-        tfield(vi,ti,"km","Intervallo km (casa madre)","number")+
-        tfield(vi,ti,"months","Intervallo mesi (casa madre)","number")+
+        tfield(vi,ti,"km","Ripeti ogni km (casa madre)","number")+
+        tfield(vi,ti,"months","Ripeti ogni mesi (casa madre)","number")+
         tfield(vi,ti,"recKm","Km consigliati (tuo)","number")+
         tfield(vi,ti,"recMonths","Mesi consigliati (tuo)","number")+
-        tfield(vi,ti,"lastKm","Ultima fatta a km","number")+
-        '<div><label>Ultima fatta il</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="lastDate" value="'+msToInput(t.lastDate)+'" /></div>'+
+        tfield(vi,ti,"lastKm","Ultima volta a km","number")+
+        '<div><label>Ultima volta il</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="lastDate" value="'+msToInput(t.lastDate)+'" /></div>'+
         '</div>';
       h += '<label>Note</label><textarea data-vi="'+vi+'" data-ti="'+ti+'" data-tk="notes">'+esc(t.notes)+'</textarea>';
       h += '<div class="chk"><input type="checkbox" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="enabled" '+(t.enabled?'checked':'')+' /><span>Attivo (mostrato al cliente)</span></div>';
@@ -437,7 +439,7 @@ function renderEditor(){
             '<div><label>Data</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="date" value="'+msToInput(c.date)+'" /></div>'+
             '</div>';
           h += '<label>Nota</label><textarea data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="note" '+
-               'placeholder="es. ancora buone, sostituire al prossimo tagliando">'+esc(c.note)+'</textarea>';
+               'placeholder="es. ancora buono, da rifare al prossimo intervento">'+esc(c.note)+'</textarea>';
           h += '</div>';
         } else {
           const when = [(c.km!=="" && c.km!=null) ? (Number(c.km).toLocaleString("it-IT")+" km") : null,
@@ -450,7 +452,7 @@ function renderEditor(){
 
       h += '</div>'; // task-card
     });
-    h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-task="'+vi+'">+ Aggiungi tagliando</button>'+
+    h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-task="'+vi+'">+ Aggiungi lavorazione</button>'+
          '<button class="ghost small" data-import-plan="'+vi+'">📋 Importa piano</button>'+
          '<button class="ghost small" data-export-plan="'+vi+'">⬇ Esporta come piano</button></div>';
     h += '</div>'; // veh-card
@@ -481,9 +483,13 @@ function kmInfoHtml(v){
 function field(v,vi,_a,_b,k,label,type){
   return '<div><label>'+esc(label)+'</label><input type="'+inType(type)+'" data-vi="'+vi+'" data-vk="'+k+'" value="'+esc(v[k])+'" /></div>';
 }
+// Suggerimenti per i campi della lavorazione (non solo tagliandi: freni, distribuzione, riparazioni…)
+const TASK_PH = { name:"es. Freni, Frizione…", km:"opzionale", months:"opzionale",
+  recKm:"opzionale", recMonths:"opzionale" };
 function tfield(vi,ti,k,label,type){
   const t = M.vehicles[vi].tasks[ti];
-  return '<div><label>'+esc(label)+'</label><input type="'+inType(type)+'" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="'+k+'" value="'+esc(t[k])+'" /></div>';
+  return '<div><label>'+esc(label)+'</label><input type="'+inType(type)+'" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="'+k+'" '+
+    (TASK_PH[k] ? 'placeholder="'+TASK_PH[k]+'" ' : '')+'value="'+esc(t[k])+'" /></div>';
 }
 function ifield(vi,ti,ii,k,label,type){
   const iv = M.vehicles[vi].tasks[ti].interventions[ii];
@@ -567,7 +573,7 @@ function bindEditor(){
   });
   document.querySelectorAll('[data-del-task]').forEach(el => el.onclick = () => {
     const [vi,ti]=el.dataset.delTask.split("_").map(Number); const v=M.vehicles[vi], t=v.tasks[ti];
-    if (!confirm("Eliminare il tagliando \""+(t.name||"")+"\"?")) return;
+    if (!confirm("Eliminare la lavorazione \""+(t.name||"")+"\"?")) return;
     if (!isNewId(t.syncId)) removed.task.push({vid:v.vid, vname:v.name, syncId:t.syncId, tname:t.name});
     v.tasks.splice(ti,1); renderEditor();
   });
@@ -578,7 +584,7 @@ function bindEditor(){
   });
   document.querySelectorAll('[data-add-task]').forEach(el => el.onclick = () => {
     const vi=+el.dataset.addTask;
-    M.vehicles[vi].tasks.push({ syncId:genId(), name:"", category:CATEGORIES[0], km:"", months:"",
+    M.vehicles[vi].tasks.push({ syncId:genId(), name:"", category:CATEGORIES[CATEGORIES.length-1], km:"", months:"",
       recKm:"", recMonths:"", lastKm:"", lastDate:null, notes:"", enabled:true, interventions:[], checks:[], _new:true });
     dirty.task.add(M.vehicles[vi].tasks[M.vehicles[vi].tasks.length-1].syncId); renderEditor();
   });
