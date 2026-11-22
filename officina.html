@@ -257,7 +257,26 @@ function showLogin(err){
 }
 
 // ========== CLIENT LIST ==========
+// ---- Aggiornamento automatico (ogni 30 min mentre la pagina è aperta) ----
+// Elenco: si ricarica. Scheda cliente: si ricarica solo se non ci sono modifiche non salvate
+// e non stai scrivendo in un campo (così non perdi nulla).
+const AUTO_REFRESH_MS = 30 * 60 * 1000;
+let VIEW = "login", LAST_LOAD = Date.now();
+function typing(){ const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName); }
+async function autoRefresh(){
+  if (document.hidden || Date.now() - LAST_LOAD < AUTO_REFRESH_MS || typing()) return;
+  if (VIEW === "list") { LAST_LOAD = Date.now(); showListFromServer(); }
+  else if (VIEW === "client" && M && !isNew && dirtyCount() === 0) {
+    LAST_LOAD = Date.now();
+    const y = window.scrollY;
+    try { editClient(await apiLoadClient(ORIG_SLUG), false); window.scrollTo(0, y); } catch(_) {}
+  }
+}
+setInterval(autoRefresh, 60 * 1000);
+document.addEventListener("visibilitychange", autoRefresh);
+
 function showList(clients){
+  VIEW = "list"; LAST_LOAD = Date.now();
   let h = '<header><h1>Clienti</h1><button id="newBtn" class="small">+ Nuovo cliente</button></header>';
   h += '<div class="card">';
   if (!clients.length) h += '<div class="center">Nessun cliente. Creane uno con “+ Nuovo cliente”.</div>';
@@ -307,6 +326,7 @@ const dirty = { client:false, veh:new Set(), task:new Set(), iv:new Set() };
 const removed = { veh:[], task:[], iv:[] };  // {vid}/{vid,syncId}/{vid,taskSyncId,syncId}
 
 function editClient(profile, created){
+  VIEW = "client"; LAST_LOAD = Date.now();
   isNew = created;
   ORIG_SLUG = profile.slug || slugify(profile.client);
   M = {

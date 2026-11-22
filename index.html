@@ -633,6 +633,20 @@ async function registerSW() {
 }
 registerSW();
 init();
+
+// Aggiornamento automatico: se la pagina resta aperta, ogni 30 min ricarica i dati
+// (e subito quando torni sulla scheda dopo più di 30 min). Non interrompe se stai scrivendo i km.
+let LAST_LOAD = Date.now();
+async function autoRefresh() {
+  if (!SLUG || MOCK || document.hidden || Date.now() - LAST_LOAD < 30 * 60 * 1000) return;
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
+  LAST_LOAD = Date.now();
+  const y = window.scrollY;
+  try { DATA = await loadData(); render(); window.scrollTo(0, y); } catch (_) {}
+}
+setInterval(autoRefresh, 60 * 1000);
+document.addEventListener("visibilitychange", autoRefresh);
 </script>
 <div id="lightbox">
   <div class="lb-bar"><a data-dl href="#" download>⬇ Scarica</a><button onclick="closeLb()">✕ Chiudi</button></div>
