@@ -185,13 +185,15 @@ function everyStr(km, months) {
 }
 // ---- Ultimo inserimento km: quando e da dove (app / web / officina) ----
 const KM_STALE_DAYS = 14;
-const KM_SRC = { app: "app", web: "web", officina: "officina" };
+const KM_SRC = { app: "dal cliente (app)", web: "dal cliente (sito web)", officina: "dall'officina" };
 function kmAge(at){ return at ? Math.max(0, Math.floor((Date.now() - at) / 86400000)) : null; }
 function kmStale(at){ return !!at && (Date.now() - at) > KM_STALE_DAYS * 86400000; }
 function kmInfoText(at, src){
   if (!at) return "";
-  const d = new Date(at).toLocaleDateString("it-IT", { day:"numeric", month:"short", year:"numeric" });
-  return "Km aggiornati il " + d + (KM_SRC[src] ? " · da " + KM_SRC[src] : "");
+  const dt = new Date(at);
+  const d = dt.toLocaleDateString("it-IT", { day:"numeric", month:"short", year:"numeric" }) +
+            " alle " + dt.toLocaleTimeString("it-IT", { hour:"2-digit", minute:"2-digit" });
+  return "Km inseriti il " + d + (KM_SRC[src] ? " " + KM_SRC[src] : "");
 }
 function esc(s){ return String(s ?? "").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 // Scontrino a schermo intero: tocca per ingrandire (o pizzica), "Scarica" lo salva nei Download.
