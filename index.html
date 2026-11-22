@@ -64,6 +64,7 @@
     :root { --bg:#f3f4f6; --card:#fff; --card2:#f0f2f5; --text:#1a1c20; --muted:#5f6670;
             --line:#e3e6ea; --primary-ct:#e4edff; --check:#2f7d6a; }
   }
+  .iv-parts { margin: 6px 0 0 18px; padding: 0; font-size: .85rem; }
   .kmbox { margin-top: 10px; border-radius: 12px; }
   .kmbox .kmrow { margin-top: 0; }
   .kmbox.stale { background: #ffe08a; color: #3a2e00; padding: 10px; }
@@ -364,11 +365,17 @@ function interventionsHtml(t) {
                    x.priceEuro != null ? fmtEuro(x.priceEuro) : null,
                    x.receiptNumber ? "scontrino " + x.receiptNumber : null].filter(Boolean).map(esc).join(" · ");
       const note = (x.notes && String(x.notes).trim()) ? '<br>' + esc(x.notes) : '';
+      const parts = Array.isArray(x.parts) && x.parts.length
+        ? '<ul class="iv-parts">' + x.parts.map(p => '<li>' + esc([
+            (p.qty && p.qty !== 1 ? p.qty + '× ' : '') + (p.name || ''),
+            p.brand || null, p.code ? 'cod. ' + p.code : null,
+            p.price != null ? fmtEuro(p.price) : null].filter(Boolean).join(' · ')) + '</li>').join('') + '</ul>'
+        : '';
       const photo = x.photo
         ? '<div class="rcpt-wrap"><img class="rcpt" loading="lazy" alt="Scontrino" ' +
           'src="data:image/jpeg;base64,' + x.photo + '" onclick="zoomImg(this.src)"></div>'
         : '';
-      return '<div class="check">🔧 ' + head + (sub ? '<br><small>' + sub + '</small>' : '') + note + photo + '</div>';
+      return '<div class="check">🔧 ' + head + (sub ? '<br><small>' + sub + '</small>' : '') + note + parts + photo + '</div>';
     }).join("");
 }
 
@@ -432,7 +439,7 @@ function renderVehicle(v, idx) {
           (v.plate ? " · " + esc(v.plate) : "") + '</div>';
   const stale = kmStale(v.odoAt);
   html += '<div class="kmbox' + (stale ? ' stale' : '') + '">';
-  html += '<div class="kmrow"><input id="km' + idx + '" type="number" inputmode="numeric" value="' +
+  html += '<div class="kmrow"><input id="km' + idx + '" type="text" inputmode="numeric" value="' +
           (v.odometerKm ?? "") + '" placeholder="km attuali" />' +
           '<button id="saveKm' + idx + '">Aggiorna km</button></div>';
   if (v.odoAt) html += '<div class="kmwhen">' + esc(kmInfoText(v.odoAt, v.odoSrc)) + '</div>';
@@ -509,7 +516,8 @@ async function onSaveKm(idx) {
   const input = document.getElementById("km" + idx);
   const btn = document.getElementById("saveKm" + idx);
   const v = DATA.vehicles[idx];
-  const km = parseInt(input.value, 10);
+  // "120.500" / "120 500" → 120500 (con type=number "120.500" diventava 120)
+  const km = parseInt(String(input.value).trim().replace(/[\s.'’]/g, "").replace(/,.*$/, ""), 10);
   if (isNaN(km) || km < 0) { toast("Inserisci un numero valido"); return; }
   btn.disabled = true; btn.textContent = "Salvo…";
   try {

@@ -24,6 +24,7 @@
   .veh-card { border-left:3px solid var(--primary); }
   .task-card { background:var(--card2); border:1px solid var(--line); border-radius:12px;
     padding:12px; margin:10px 0; }
+  .part-box { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-top:8px; background:rgba(127,127,127,.04); }
   .iv-card { background:var(--card); border:1px dashed var(--line); border-radius:10px;
     padding:10px; margin:8px 0; }
   label { display:block; font-size:.78rem; color:var(--muted); margin:8px 0 3px; }
@@ -98,7 +99,14 @@ function kmInfoText(at, src){
 function esc(s){ return String(s ?? "").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function genVid(){ return "v" + Math.random().toString(16).slice(2,10); }
 function genId(){ return (crypto.randomUUID ? crypto.randomUUID() : "id"+Math.random().toString(16).slice(2)); }
-function num(v){ const n = parseInt(v,10); return isNaN(n) ? null : n; }
+// Numeri interi (km, mesi): "10.000", "10 000", "10'000" → 10000. Prima "10.000" diventava 10.
+function num(v){
+  if (v===""||v==null) return null;
+  const s = String(v).trim().replace(/[\s.'’]/g,"").replace(/,.*$/,"");
+  const n = parseInt(s,10); return isNaN(n) ? null : n;
+}
+// I campi numerici sono di testo con tastiera numerica: un input type=number legge "10.000" come 10.
+function inType(t){ return t==="number" ? 'text" inputmode="numeric' : t; }
 function dec(v){ if(v===""||v==null) return null; const n = parseFloat(String(v).replace(",",".")); return isNaN(n)?null:n; }
 function msToInput(ms){ if(!ms) return ""; const d=new Date(ms); return d.toISOString().slice(0,10); }
 function inputToMs(s){ if(!s) return null; const t=Date.parse(s+"T12:00:00"); return isNaN(t)?null:t; }
@@ -320,6 +328,8 @@ function editClient(profile, created){
           supplier:i.supplier||"", priceEuro:i.priceEuro??"", installedAtKm:i.installedAtKm??"",
           installedAtDate:i.installedAtDate||null, notes:i.notes||"",
           warrantyMonths:i.warrantyMonths??"", receiptNumber:i.receiptNumber||"",
+          parts: (i.parts||[]).map(p => ({ name:p.name||"", brand:p.brand||"", code:p.code||"",
+            qty:p.qty??"", price:p.price??"" })),
         })),
       })),
     })),
@@ -395,6 +405,22 @@ function renderEditor(){
         h += '<label>Lavoro svolto / note (cosa hai fatto)</label>'+
              '<textarea data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="notes" '+
              'placeholder="es. sostituite pastiglie anteriori, controllati dischi">'+esc(iv.notes)+'</textarea>';
+        // Ricambi usati: un box per ricambio, "+ Aggiungi ricambio" ne mette un altro sotto.
+        const parts = iv.parts || (iv.parts = []);
+        h += '<div class="section-title" style="font-size:.88rem;margin-top:10px">Ricambi usati'+
+             (parts.length ? ' ('+parts.length+')' : '')+'</div>';
+        parts.forEach((p,pi) => {
+          const pk = vi+'_'+ti+'_'+ii+'_'+pi;
+          const pf = (k,label,type,ph) => '<div><label>'+label+'</label><input type="'+type+'" data-pk="'+pk+'" data-pf="'+k+'" '+
+            (ph?'placeholder="'+ph+'" ':'')+'value="'+esc(p[k])+'" /></div>';
+          h += '<div class="part-box"><div class="row"><strong>#'+(pi+1)+'</strong><div class="spacer"></div>'+
+               '<button class="ghost small" data-del-part="'+pk+'">✕</button></div>'+
+               '<div class="grid">'+pf("name","Ricambio","text","es. Filtro olio")+pf("brand","Marca","text","")+
+               pf("code","Codice","text","")+pf("qty","Q.tà","text","1")+pf("price","Prezzo €","text","")+'</div></div>';
+        });
+        const tot = parts.reduce((a,p) => a + (dec(p.price)||0) * (dec(p.qty)||1), 0);
+        h += '<div class="row" style="margin-top:6px"><button class="ghost small" data-add-part="'+vi+'_'+ti+'_'+ii+'">+ Aggiungi ricambio</button>'+
+             (tot ? '<div class="spacer"></div><span class="sub">Totale ricambi: '+tot.toFixed(2).replace(".",",")+' €</span>' : '')+'</div>';
         h += '</div>';
       });
       h += '<div class="row" style="margin-top:8px"><button class="ghost small" data-add-iv="'+vi+'_'+ti+'">+ Intervento</button></div>';
@@ -407,7 +433,7 @@ function renderEditor(){
           h += '<div class="row"><strong>✓ Nuovo controllo</strong><div class="spacer"></div>'+
                '<button class="danger" data-del-check="'+vi+'_'+ti+'_'+ci+'">Rimuovi</button></div>';
           h += '<div class="grid">'+
-            '<div><label>Km</label><input type="number" data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="km" value="'+esc(c.km)+'" /></div>'+
+            '<div><label>Km</label><input type="text" inputmode="numeric" data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="km" value="'+esc(c.km)+'" /></div>'+
             '<div><label>Data</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="date" value="'+msToInput(c.date)+'" /></div>'+
             '</div>';
           h += '<label>Nota</label><textarea data-vi="'+vi+'" data-ti="'+ti+'" data-ci="'+ci+'" data-ck="note" '+
@@ -453,15 +479,15 @@ function kmInfoHtml(v){
     (stale ? ' · ⚠ non aggiornati da ' + kmAge(v.odoAt) + ' giorni' : '') + '</div>';
 }
 function field(v,vi,_a,_b,k,label,type){
-  return '<div><label>'+esc(label)+'</label><input type="'+type+'" data-vi="'+vi+'" data-vk="'+k+'" value="'+esc(v[k])+'" /></div>';
+  return '<div><label>'+esc(label)+'</label><input type="'+inType(type)+'" data-vi="'+vi+'" data-vk="'+k+'" value="'+esc(v[k])+'" /></div>';
 }
 function tfield(vi,ti,k,label,type){
   const t = M.vehicles[vi].tasks[ti];
-  return '<div><label>'+esc(label)+'</label><input type="'+type+'" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="'+k+'" value="'+esc(t[k])+'" /></div>';
+  return '<div><label>'+esc(label)+'</label><input type="'+inType(type)+'" data-vi="'+vi+'" data-ti="'+ti+'" data-tk="'+k+'" value="'+esc(t[k])+'" /></div>';
 }
 function ifield(vi,ti,ii,k,label,type){
   const iv = M.vehicles[vi].tasks[ti].interventions[ii];
-  return '<div><label>'+esc(label)+'</label><input type="'+type+'" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="'+k+'" value="'+esc(iv[k])+'" /></div>';
+  return '<div><label>'+esc(label)+'</label><input type="'+inType(type)+'" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="'+k+'" value="'+esc(iv[k])+'" /></div>';
 }
 
 function newCheckCount(){
@@ -505,6 +531,27 @@ function bindEditor(){
     if (k==="installedAtDate") iv.installedAtDate = inputToMs(el.value); else iv[k]=el.value;
     dirty.iv.add(iv.syncId); refreshBar();
   }));
+  document.querySelectorAll('[data-pf]').forEach(el => el.addEventListener("input", () => {
+    const [vi,ti,ii,pi] = el.dataset.pk.split("_").map(Number);
+    const iv = M.vehicles[vi].tasks[ti].interventions[ii];
+    iv.parts[pi][el.dataset.pf] = el.value;
+    dirty.iv.add(iv.syncId); refreshBar();
+  }));
+  document.querySelectorAll('[data-add-part]').forEach(el => el.onclick = () => {
+    const [vi,ti,ii] = el.dataset.addPart.split("_").map(Number);
+    const iv = M.vehicles[vi].tasks[ti].interventions[ii];
+    (iv.parts || (iv.parts = [])).push({ name:"", brand:"", code:"", qty:"1", price:"" });
+    dirty.iv.add(iv.syncId); renderEditor();
+    // porta il cursore nel nuovo box
+    const last = document.querySelectorAll('[data-pk^="'+vi+'_'+ti+'_'+ii+'_"][data-pf="name"]');
+    if (last.length) { last[last.length-1].focus(); last[last.length-1].scrollIntoView({block:"center"}); }
+  });
+  document.querySelectorAll('[data-del-part]').forEach(el => el.onclick = () => {
+    const [vi,ti,ii,pi] = el.dataset.delPart.split("_").map(Number);
+    const iv = M.vehicles[vi].tasks[ti].interventions[ii];
+    iv.parts.splice(pi, 1);
+    dirty.iv.add(iv.syncId); renderEditor();
+  });
   document.querySelectorAll('[data-ck]').forEach(el => el.addEventListener("input", () => {
     const vi=+el.dataset.vi, ti=+el.dataset.ti, ci=+el.dataset.ci, k=el.dataset.ck;
     const c=M.vehicles[vi].tasks[ti].checks[ci];
@@ -540,7 +587,8 @@ function bindEditor(){
   document.querySelectorAll('[data-add-iv]').forEach(el => el.onclick = () => {
     const [vi,ti]=el.dataset.addIv.split("_").map(Number); const t=M.vehicles[vi].tasks[ti];
     t.interventions.push({ syncId:genId(), brand:"", model:"", partCode:"", supplier:"", priceEuro:"",
-      installedAtKm: M.vehicles[vi].odometerKm||"", installedAtDate:Date.now(), notes:"", warrantyMonths:"", _new:true });
+      installedAtKm: M.vehicles[vi].odometerKm||"", installedAtDate:Date.now(), notes:"", warrantyMonths:"",
+      parts:[{ name:"", brand:"", code:"", qty:"1", price:"" }], _new:true });
     dirty.iv.add(t.interventions[t.interventions.length-1].syncId); renderEditor();
   });
   document.querySelectorAll('[data-add-check]').forEach(el => el.onclick = () => {
@@ -599,7 +647,10 @@ function buildOps(){
             brand:iv.brand, model:iv.model, partCode:iv.partCode, supplier:iv.supplier,
             priceEuro:dec(iv.priceEuro), installedAtKm:num(iv.installedAtKm),
             installedAtDate:iv.installedAtDate||Date.now(), notes:iv.notes,
-            warrantyMonths:num(iv.warrantyMonths) } });
+            warrantyMonths:num(iv.warrantyMonths),
+            parts:(iv.parts||[]).filter(p => [p.name,p.brand,p.code].some(x => String(x||"").trim()))
+              .map(p => ({ name:String(p.name||"").trim(), brand:String(p.brand||"").trim(), code:String(p.code||"").trim(),
+                qty: dec(p.qty) ?? 1, price: dec(p.price) })) } });
         }
       });
       (t.checks||[]).forEach(c => {
