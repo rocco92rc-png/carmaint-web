@@ -250,10 +250,14 @@ function partIconFor(t){
   return null;
 }
 const WRENCH = '<div class="wrench">🔧</div>';
-function grpColor(g){ return g==="bad" ? "var(--bad)" : g==="warn" ? "var(--warn)" : "var(--ok)"; }
-function grpLabel(g){ return g==="bad" ? "Scaduto" : g==="warn" ? "In scadenza" : "A posto"; }
+function grpColor(g){ return g==="bad" ? "var(--bad)" : g==="warn" ? "var(--warn)" : g==="todo" ? "#5b6b8c" : "var(--ok)"; }
+function grpLabel(g){ return g==="bad" ? "Scaduto" : g==="warn" ? "In scadenza" : g==="todo" ? "Da fare" : "A posto"; }
 
-function statusGroup(st){ return st === "OVERDUE" ? "bad" : st === "DUE_SOON" ? "warn" : "ok"; }
+// "todo": lavoro mai registrato che ha un intervallo (es. distribuzione su auto usata): non è "a posto".
+function statusGroup(st, t){
+  if (st === "NEVER" && t && [t.km, t.months, t.recKm, t.recMonths].some(x => x != null)) return "todo";
+  return st === "OVERDUE" ? "bad" : st === "DUE_SOON" ? "warn" : "ok";
+}
 // Icona rappresentativa di ogni sistema (categoria). null -> chiave inglese.
 const CAT_ICON = {
   "Freni": "dischi", "Olio motore": "olio", "Distribuzione": "distribuzione", "Filtri": "filtro_aria",
@@ -263,21 +267,21 @@ const CAT_ICON = {
 };
 function catIcon(cat){ return CAT_ICON[cat] || null; }
 function iconImg(id){ return id ? '<img src="parti/' + id + '.png" alt="" onerror="this.outerHTML=WRENCH">' : WRENCH; }
-const ORD = { bad: 0, warn: 1, ok: 2 };
+const ORD = { bad: 0, warn: 1, todo: 2, ok: 3 };
 
 const SCHEDA = []; // per veicolo: { counts:{bad,warn,ok}, macros:[{cat,icon,worst,nbad,nwarn,parts:[...]}] }
 
 function buildScheda(v, idx, cur){
-  const counts = { bad: 0, warn: 0, ok: 0 };
+  const counts = { bad: 0, warn: 0, todo: 0, ok: 0 };
   const byCat = {};
   (v.tasks || []).filter(t => t.enabled !== false).forEach(t => {
     const c = compute(t, cur);
-    const g = statusGroup(c.status);
+    const g = statusGroup(c.status, t);
     counts[g]++;
     const cat = t.category || "Altro";
     (byCat[cat] = byCat[cat] || []).push({
       name: t.name, icon: partIconFor(t), g,
-      detail: c.status === "NEVER" ? "mai eseguita" : (detailText(c) || ""),
+      detail: c.status === "NEVER" ? (g === "todo" ? "mai registrata: da verificare/fare" : "mai eseguita") : (detailText(c) || ""),
       interval: everyStr(t.km, t.kmOnly ? null : t.months) + (t.kmOnly ? " (solo km)" : ""),
       prudent: (t.recKm || t.recMonths) ? everyStr(t.recKm, t.recMonths) : "",
       last: (t.lastKm != null || t.lastDate != null)
@@ -291,18 +295,21 @@ function buildScheda(v, idx, cur){
     const parts = byCat[cat].sort((a, b) => ORD[a.g] - ORD[b.g]);
     const nbad = parts.filter(p => p.g === "bad").length;
     const nwarn = parts.filter(p => p.g === "warn").length;
-    const worst = nbad ? "bad" : nwarn ? "warn" : "ok";
-    return { cat, icon: catIcon(cat), parts, worst, nbad, nwarn };
+    const ntodo = parts.filter(p => p.g === "todo").length;
+    const worst = nbad ? "bad" : nwarn ? "warn" : ntodo ? "todo" : "ok";
+    return { cat, icon: catIcon(cat), parts, worst, nbad, nwarn, ntodo };
   }).sort((a, b) => ORD[a.worst] - ORD[b.worst] || a.cat.localeCompare(b.cat));
   SCHEDA[idx] = { counts, macros };
 
   let h = '<div class="scheda"><div class="statusline">' +
     '<span style="color:var(--bad)">● ' + counts.bad + ' scadut' + (counts.bad === 1 ? 'o' : 'e') + '</span>' +
     '<span style="color:var(--warn)">● ' + counts.warn + ' in scadenza</span>' +
+    (counts.todo ? '<span style="color:#7d8fb3">● ' + counts.todo + ' da fare</span>' : '') +
     '<span style="color:var(--ok)">● ' + counts.ok + ' a posto</span></div><div class="mgrid">';
   macros.forEach((m, mi) => {
     const badge = m.nbad ? '<span class="mbadge" style="background:var(--bad)">' + m.nbad + '</span>'
-      : m.nwarn ? '<span class="mbadge" style="background:var(--warn)">' + m.nwarn + '</span>' : '';
+      : m.nwarn ? '<span class="mbadge" style="background:var(--warn)">' + m.nwarn + '</span>'
+      : m.ntodo ? '<span class="mbadge" style="background:#5b6b8c">' + m.ntodo + '</span>' : '';
     h += '<div class="mcard" onclick="openSystem(' + idx + ',' + mi + ')">' +
       '<div class="pic">' + iconImg(m.icon) +
       '<span class="pdot" style="background:' + grpColor(m.worst) + '"></span>' + badge + '</div>' +
