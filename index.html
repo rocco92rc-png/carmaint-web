@@ -356,13 +356,15 @@ function interventionsHtml(t) {
   return iv.slice()
     .sort((a,b) => (b.installedAtDate||0) - (a.installedAtDate||0))
     .map(x => {
+      const hasParts = Array.isArray(x.parts) && x.parts.length;
       const head = [x.installedAtDate ? new Date(x.installedAtDate).toLocaleDateString("it-IT") : null,
                     x.installedAtKm != null ? fmtKm(x.installedAtKm) : null,
-                    x.brand || null].filter(Boolean).map(esc).join(" · ");
-      const sub = [x.model || null,
-                   x.partCode ? "cod. " + x.partCode : null,
+                    hasParts ? null : (x.brand || null)].filter(Boolean).map(esc).join(" · ");
+      // Con l'elenco ricambi, marca/modello/codice sono già nelle righe: non ripeterli.
+      const sub = [hasParts ? null : (x.model || null),
+                   hasParts ? null : (x.partCode ? "cod. " + x.partCode : null),
                    x.supplier || null,
-                   x.priceEuro != null ? fmtEuro(x.priceEuro) : null,
+                   x.priceEuro != null ? (hasParts ? "totale " : "") + fmtEuro(x.priceEuro) : null,
                    x.receiptNumber ? "scontrino " + x.receiptNumber : null].filter(Boolean).map(esc).join(" · ");
       const note = (x.notes && String(x.notes).trim()) ? '<br>' + esc(x.notes) : '';
       const parts = Array.isArray(x.parts) && x.parts.length

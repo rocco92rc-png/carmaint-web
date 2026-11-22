@@ -328,8 +328,11 @@ function editClient(profile, created){
           supplier:i.supplier||"", priceEuro:i.priceEuro??"", installedAtKm:i.installedAtKm??"",
           installedAtDate:i.installedAtDate||null, notes:i.notes||"",
           warrantyMonths:i.warrantyMonths??"", receiptNumber:i.receiptNumber||"",
-          parts: (i.parts||[]).map(p => ({ name:p.name||"", brand:p.brand||"", code:p.code||"",
-            qty:p.qty??"", price:p.price??"" })),
+          parts: (i.parts && i.parts.length)
+            ? i.parts.map(p => ({ name:p.name||"", brand:p.brand||"", code:p.code||"", qty:p.qty??"", price:p.price??"" }))
+            // interventi vecchi (un solo ricambio nei campi Marca/Modello/Codice/Prezzo) → primo box
+            : ((i.brand||i.model||i.partCode||i.priceEuro!=null)
+                ? [{ name:i.model||"", brand:i.brand||"", code:i.partCode||"", qty:"1", price:i.priceEuro??"" }] : []),
         })),
       })),
     })),
@@ -390,16 +393,13 @@ function renderEditor(){
       if (t.interventions.length) h += '<div class="section-title" style="font-size:.9rem">Interventi registrati</div>';
       t.interventions.forEach((iv,ii) => {
         h += '<div class="iv-card" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'">';
-        h += '<div class="row"><strong>🔧 '+esc(iv.brand||"intervento")+'</strong><div class="spacer"></div>'+
+        const ivTitle = iv.installedAtDate ? new Date(iv.installedAtDate).toLocaleDateString("it-IT") : "nuovo";
+        h += '<div class="row"><strong>🔧 Intervento del '+esc(ivTitle)+'</strong><div class="spacer"></div>'+
              '<button class="danger" data-del-iv="'+vi+'_'+ti+'_'+ii+'">Elimina</button></div>';
         h += '<div class="grid">'+
-          ifield(vi,ti,ii,"brand","Marca","text")+
-          ifield(vi,ti,ii,"model","Modello","text")+
-          ifield(vi,ti,ii,"partCode","Codice","text")+
-          ifield(vi,ti,ii,"supplier","Fornitore","text")+
-          ifield(vi,ti,ii,"priceEuro","Prezzo €","text")+
-          ifield(vi,ti,ii,"installedAtKm","Montato a km","number")+
+          ifield(vi,ti,ii,"installedAtKm","Fatto a km","number")+
           '<div><label>Data</label><input type="date" data-vi="'+vi+'" data-ti="'+ti+'" data-ii="'+ii+'" data-ik="installedAtDate" value="'+msToInput(iv.installedAtDate)+'" /></div>'+
+          ifield(vi,ti,ii,"supplier","Fornitore / negozio","text")+
           ifield(vi,ti,ii,"warrantyMonths","Garanzia (mesi)","number")+
           '</div>';
         h += '<label>Lavoro svolto / note (cosa hai fatto)</label>'+
@@ -407,7 +407,7 @@ function renderEditor(){
              'placeholder="es. sostituite pastiglie anteriori, controllati dischi">'+esc(iv.notes)+'</textarea>';
         // Ricambi usati: un box per ricambio, "+ Aggiungi ricambio" ne mette un altro sotto.
         const parts = iv.parts || (iv.parts = []);
-        h += '<div class="section-title" style="font-size:.88rem;margin-top:10px">Ricambi usati'+
+        h += '<div class="section-title" style="font-size:.88rem;margin-top:10px">Ricambi montati'+
              (parts.length ? ' ('+parts.length+')' : '')+'</div>';
         parts.forEach((p,pi) => {
           const pk = vi+'_'+ti+'_'+ii+'_'+pi;
@@ -643,9 +643,14 @@ function buildOps(){
       }
       t.interventions.forEach(iv => {
         if (dirty.iv.has(iv.syncId)) {
+          const okParts = (iv.parts||[]).filter(p => [p.name,p.brand,p.code].some(x => String(x||"").trim()));
+          const p0 = okParts[0] || {};
+          const tot = okParts.reduce((a,p) => a + (dec(p.price)||0) * (dec(p.qty)||1), 0);
           ops.push({ t:"intervention.upsert", vid:v.vid, vname:v.name, taskSyncId:t.syncId, tname:t.name, syncId:iv.syncId, fields:{
-            brand:iv.brand, model:iv.model, partCode:iv.partCode, supplier:iv.supplier,
-            priceEuro:dec(iv.priceEuro), installedAtKm:num(iv.installedAtKm),
+            // campi "singolo ricambio" ricavati dal primo box + totale (compatibilità app/statistiche)
+            brand: String(p0.brand||"").trim(), model: String(p0.name||"").trim(), partCode: String(p0.code||"").trim(),
+            supplier:iv.supplier,
+            priceEuro: okParts.length ? (tot || null) : dec(iv.priceEuro), installedAtKm:num(iv.installedAtKm),
             installedAtDate:iv.installedAtDate||Date.now(), notes:iv.notes,
             warrantyMonths:num(iv.warrantyMonths),
             parts:(iv.parts||[]).filter(p => [p.name,p.brand,p.code].some(x => String(x||"").trim()))
